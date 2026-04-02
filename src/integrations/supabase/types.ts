@@ -14,7 +14,128 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      contacts: {
+        Row: {
+          created_at: string
+          id: string
+          name: string | null
+          phone: string
+          profile_pic_url: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          name?: string | null
+          phone: string
+          profile_pic_url?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          name?: string | null
+          phone?: string
+          profile_pic_url?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      messages: {
+        Row: {
+          contact_id: string | null
+          content: string
+          created_at: string
+          direction: Database["public"]["Enums"]["message_direction"]
+          id: string
+          message_type: string
+          ticket_id: string
+          whatsapp_message_id: string | null
+        }
+        Insert: {
+          contact_id?: string | null
+          content: string
+          created_at?: string
+          direction?: Database["public"]["Enums"]["message_direction"]
+          id?: string
+          message_type?: string
+          ticket_id: string
+          whatsapp_message_id?: string | null
+        }
+        Update: {
+          contact_id?: string | null
+          content?: string
+          created_at?: string
+          direction?: Database["public"]["Enums"]["message_direction"]
+          id?: string
+          message_type?: string
+          ticket_id?: string
+          whatsapp_message_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "messages_contact_id_fkey"
+            columns: ["contact_id"]
+            isOneToOne: false
+            referencedRelation: "contacts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "messages_ticket_id_fkey"
+            columns: ["ticket_id"]
+            isOneToOne: false
+            referencedRelation: "tickets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      tickets: {
+        Row: {
+          ai_summary: string | null
+          assigned_to: string | null
+          category: string | null
+          contact_id: string
+          created_at: string
+          id: string
+          priority: Database["public"]["Enums"]["ticket_priority"]
+          status: Database["public"]["Enums"]["ticket_status"]
+          subject: string | null
+          updated_at: string
+        }
+        Insert: {
+          ai_summary?: string | null
+          assigned_to?: string | null
+          category?: string | null
+          contact_id: string
+          created_at?: string
+          id?: string
+          priority?: Database["public"]["Enums"]["ticket_priority"]
+          status?: Database["public"]["Enums"]["ticket_status"]
+          subject?: string | null
+          updated_at?: string
+        }
+        Update: {
+          ai_summary?: string | null
+          assigned_to?: string | null
+          category?: string | null
+          contact_id?: string
+          created_at?: string
+          id?: string
+          priority?: Database["public"]["Enums"]["ticket_priority"]
+          status?: Database["public"]["Enums"]["ticket_status"]
+          subject?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tickets_contact_id_fkey"
+            columns: ["contact_id"]
+            isOneToOne: false
+            referencedRelation: "contacts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
@@ -23,7 +144,9 @@ export type Database = {
       [_ in never]: never
     }
     Enums: {
-      [_ in never]: never
+      message_direction: "inbound" | "outbound"
+      ticket_priority: "low" | "medium" | "high" | "urgent"
+      ticket_status: "open" | "in_progress" | "resolved" | "closed"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -150,6 +273,10 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      message_direction: ["inbound", "outbound"],
+      ticket_priority: ["low", "medium", "high", "urgent"],
+      ticket_status: ["open", "in_progress", "resolved", "closed"],
+    },
   },
 } as const
