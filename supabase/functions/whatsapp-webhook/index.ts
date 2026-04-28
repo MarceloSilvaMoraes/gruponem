@@ -22,7 +22,6 @@ serve(async (req) => {
   try {
     const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
     const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
 
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
     
@@ -35,8 +34,6 @@ serve(async (req) => {
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
-
-    console.log("Webhook received:", JSON.stringify(body));
 
     // Evolution API webhook payload structure
     const event = body.event;
@@ -55,16 +52,16 @@ serve(async (req) => {
       });
     }
 
-    const phone = messageData.key?.remoteJid?.replace("@s.whatsapp.net", "") || "";
+    const remoteJid = messageData.key?.remoteJid || "";
+    const phoneJid = messageData.key?.remoteJidAlt || remoteJid;
+    const phone = String(phoneJid).replace(/\D/g, "");
     const pushName = messageData.pushName || null;
     const messageContent = messageData.message?.conversation 
       || messageData.message?.extendedTextMessage?.text 
       || messageData.message?.imageMessage?.caption
       || "[mídia]";
-    const whatsappMessageId = messageData.key?.id || null;
 
     // Ignore group messages — only handle direct chats
-    const remoteJid = messageData.key?.remoteJid || "";
     if (remoteJid.endsWith("@g.us")) {
       return new Response(JSON.stringify({ ok: true, skipped: "group" }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -88,6 +85,12 @@ serve(async (req) => {
         JSON.stringify({ ok: true, skipped: "no_trigger" }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
+    }
+
+    if (!phone) {
+      return new Response(JSON.stringify({ ok: true, skipped: "missing_phone" }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
     // Upsert contact only when a trigger fires (so we have it ready for the Typebot callback)
