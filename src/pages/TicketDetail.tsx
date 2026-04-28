@@ -10,6 +10,7 @@ import {
   History,
   UserPlus,
   CheckCircle2,
+  Trash2,
 } from "lucide-react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useTicket, useTicketMessages } from "@/hooks/useTickets";
@@ -21,6 +22,17 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import {
   Select,
   SelectContent,
@@ -93,6 +105,20 @@ export default function TicketDetail() {
     }
   };
 
+  const deleteTicket = async () => {
+    // remove dependentes manualmente (não há FK cascade)
+    await supabase.from("messages").delete().eq("ticket_id", id!);
+    await supabase.from("ticket_notes").delete().eq("ticket_id", id!);
+    await supabase.from("ticket_activity").delete().eq("ticket_id", id!);
+    const { error } = await supabase.from("tickets").delete().eq("id", id!);
+    if (error) {
+      toast.error("Erro ao excluir", { description: error.message });
+    } else {
+      toast.success("Chamado excluído");
+      navigate("/");
+    }
+  };
+
   if (!ticket) {
     return (
       <div className="min-h-screen bg-background">
@@ -129,6 +155,30 @@ export default function TicketDetail() {
               {format(new Date(ticket.created_at), "dd/MM/yyyy HH:mm", { locale: ptBR })}
             </p>
           </div>
+          {role === "admin" && (
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button variant="destructive" size="sm">
+                  <Trash2 className="h-4 w-4" /> Excluir
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Excluir chamado?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    Esta ação não pode ser desfeita. Todas as mensagens, notas e
+                    histórico associados também serão removidos.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                  <AlertDialogAction onClick={deleteTicket}>
+                    Excluir
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          )}
         </div>
 
         {/* Control bar */}

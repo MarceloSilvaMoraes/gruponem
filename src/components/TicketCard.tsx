@@ -3,6 +3,7 @@ import { ptBR } from "date-fns/locale";
 import { Clock, User, UserCheck } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 import type { TicketWithContact } from "@/hooks/useTickets";
 import { useTeam } from "@/hooks/useTeam";
 
@@ -23,9 +24,18 @@ const priorityLabels: Record<string, string> = {
 interface TicketCardProps {
   ticket: TicketWithContact;
   onClick: () => void;
+  selectable?: boolean;
+  selected?: boolean;
+  onToggleSelect?: () => void;
 }
 
-export function TicketCard({ ticket, onClick }: TicketCardProps) {
+export function TicketCard({
+  ticket,
+  onClick,
+  selectable,
+  selected,
+  onToggleSelect,
+}: TicketCardProps) {
   const { data: team } = useTeam();
   const assignee = team?.find((m) => m.user_id === ticket.assigned_to);
   return (
@@ -38,6 +48,17 @@ export function TicketCard({ ticket, onClick }: TicketCardProps) {
     >
       <CardContent className="p-4">
         <div className="flex items-start justify-between gap-3">
+          {selectable && (
+            <div
+              className="pt-0.5"
+              onClick={(e) => {
+                e.stopPropagation();
+                onToggleSelect?.();
+              }}
+            >
+              <Checkbox checked={selected} />
+            </div>
+          )}
           <div className="flex-1 min-w-0">
             <h3 className="font-semibold text-sm truncate" style={{ fontFamily: "var(--font-display)" }}>
               {ticket.subject || "Sem assunto"}
