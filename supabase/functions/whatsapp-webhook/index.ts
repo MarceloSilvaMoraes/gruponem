@@ -74,6 +74,24 @@ serve(async (req) => {
       throw new Error("Failed to upsert contact");
     }
 
+    // 1b. Check if message matches a configured trigger keyword.
+    // If yes, we DO NOT classify with AI nor create a ticket here —
+    // the Typebot flow will collect the description and POST to typebot-webhook.
+    const normalized = messageContent.trim().toLowerCase();
+    const { data: triggers } = await supabase
+      .from("trigger_keywords")
+      .select("keyword")
+      .eq("active", true);
+    const matchedTrigger = triggers?.find((t) => t.keyword.toLowerCase() === normalized);
+
+    if (matchedTrigger) {
+      console.log("Trigger matched, skipping AI flow:", matchedTrigger.keyword);
+      return new Response(
+        JSON.stringify({ ok: true, trigger: matchedTrigger.keyword, handoff: "typebot" }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     // 2. Find open ticket or create new one
     let { data: ticket } = await supabase
       .from("tickets")
