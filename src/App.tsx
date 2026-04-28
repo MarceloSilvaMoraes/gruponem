@@ -30,7 +30,10 @@ const App = () => (
               path="/team"
               element={
                 <ProtectedRoute adminOnly>
-                  <div className="min-h-screen bg-background"><AppHeader /><TeamManagement /></div>
+                  <div className="min-h-screen bg-background">
+                    <AppHeader />
+                    <TeamManagement />
+                  </div>
                 </ProtectedRoute>
               }
             />
@@ -38,7 +41,10 @@ const App = () => (
               path="/metrics"
               element={
                 <ProtectedRoute adminOnly>
-                  <div className="min-h-screen bg-background"><AppHeader /><Metrics /></div>
+                  <div className="min-h-screen bg-background">
+                    <AppHeader />
+                    <Metrics />
+                  </div>
                 </ProtectedRoute>
               }
             />
