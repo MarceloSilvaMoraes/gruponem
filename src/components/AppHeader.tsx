@@ -1,5 +1,5 @@
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { LogOut, Users, BarChart3, Inbox } from "lucide-react";
+import { LogOut, Users, BarChart3, Inbox, Webhook } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -36,6 +36,9 @@ export function AppHeader() {
               </Link>
               <Link to="/team" className={linkCls(pathname === "/team")}>
                 <Users className="h-4 w-4" /> Equipe
+              </Link>
+              <Link to="/triggers" className={linkCls(pathname === "/triggers")}>
+                <Webhook className="h-4 w-4" /> Gatilhos
               </Link>
             </>
           )}

@@ -11,6 +11,7 @@ import TicketDetail from "./pages/TicketDetail.tsx";
 import Auth from "./pages/Auth.tsx";
 import TeamManagement from "./pages/TeamManagement.tsx";
 import Metrics from "./pages/Metrics.tsx";
+import Triggers from "./pages/Triggers.tsx";
 import NotFound from "./pages/NotFound.tsx";
 
 const queryClient = new QueryClient();
@@ -44,6 +45,17 @@ const App = () => (
                   <div className="min-h-screen bg-background">
                     <AppHeader />
                     <Metrics />
+                  </div>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/triggers"
+              element={
+                <ProtectedRoute adminOnly>
+                  <div className="min-h-screen bg-background">
+                    <AppHeader />
+                    <Triggers />
                   </div>
                 </ProtectedRoute>
               }

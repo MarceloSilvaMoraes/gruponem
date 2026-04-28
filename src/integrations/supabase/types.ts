@@ -199,10 +199,13 @@ export type Database = {
           category: string | null
           contact_id: string
           created_at: string
+          description: string | null
           id: string
           priority: Database["public"]["Enums"]["ticket_priority"]
+          source: string
           status: Database["public"]["Enums"]["ticket_status"]
           subject: string | null
+          trigger_keyword: string | null
           updated_at: string
         }
         Insert: {
@@ -211,10 +214,13 @@ export type Database = {
           category?: string | null
           contact_id: string
           created_at?: string
+          description?: string | null
           id?: string
           priority?: Database["public"]["Enums"]["ticket_priority"]
+          source?: string
           status?: Database["public"]["Enums"]["ticket_status"]
           subject?: string | null
+          trigger_keyword?: string | null
           updated_at?: string
         }
         Update: {
@@ -223,10 +229,13 @@ export type Database = {
           category?: string | null
           contact_id?: string
           created_at?: string
+          description?: string | null
           id?: string
           priority?: Database["public"]["Enums"]["ticket_priority"]
+          source?: string
           status?: Database["public"]["Enums"]["ticket_status"]
           subject?: string | null
+          trigger_keyword?: string | null
           updated_at?: string
         }
         Relationships: [
@@ -238,6 +247,39 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      trigger_keywords: {
+        Row: {
+          active: boolean
+          created_at: string
+          created_by: string | null
+          description: string | null
+          id: string
+          keyword: string
+          typebot_url: string | null
+          updated_at: string
+        }
+        Insert: {
+          active?: boolean
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          id?: string
+          keyword: string
+          typebot_url?: string | null
+          updated_at?: string
+        }
+        Update: {
+          active?: boolean
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          id?: string
+          keyword?: string
+          typebot_url?: string | null
+          updated_at?: string
+        }
+        Relationships: []
       }
       user_roles: {
         Row: {
