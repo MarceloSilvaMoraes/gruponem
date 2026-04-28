@@ -41,6 +41,12 @@ serve(async (req) => {
       return json({ error: "Invalid JSON" }, 400);
     }
 
+    console.log("Typebot submission received:", JSON.stringify({
+      phone: body.phone,
+      keyword: body.keyword,
+      hasDescription: Boolean(body.description),
+    }));
+
     const phoneRaw = String(body.phone ?? "").replace(/\D/g, "");
     const description = String(body.description ?? "").trim();
 
