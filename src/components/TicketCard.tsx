@@ -1,9 +1,10 @@
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { MessageSquare, Clock, User } from "lucide-react";
+import { Clock, User, UserCheck } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import type { TicketWithContact } from "@/hooks/useTickets";
+import { useTeam } from "@/hooks/useTeam";
 
 const statusLabels: Record<string, string> = {
   open: "Aberto",
@@ -25,6 +26,8 @@ interface TicketCardProps {
 }
 
 export function TicketCard({ ticket, onClick }: TicketCardProps) {
+  const { data: team } = useTeam();
+  const assignee = team?.find((m) => m.user_id === ticket.assigned_to);
   return (
     <Card
       className="cursor-pointer transition-all hover:shadow-md hover:-translate-y-0.5 border-l-4"
@@ -66,6 +69,10 @@ export function TicketCard({ ticket, onClick }: TicketCardProps) {
               {ticket.category}
             </Badge>
           )}
+          <span className="flex items-center gap-1 ml-auto">
+            <UserCheck className="h-3 w-3" />
+            {assignee?.display_name ?? <em className="text-rose-500">não atribuído</em>}
+          </span>
         </div>
       </CardContent>
     </Card>

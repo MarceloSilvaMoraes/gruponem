@@ -20,9 +20,9 @@ export type TicketWithContact = {
   } | null;
 };
 
-export function useTickets(statusFilter?: string) {
+export function useTickets(statusFilter?: string, assignedFilter?: string) {
   return useQuery({
-    queryKey: ["tickets", statusFilter],
+    queryKey: ["tickets", statusFilter, assignedFilter],
     queryFn: async () => {
       let query = supabase
         .from("tickets")
@@ -31,6 +31,11 @@ export function useTickets(statusFilter?: string) {
 
       if (statusFilter && statusFilter !== "all") {
         query = query.eq("status", statusFilter as any);
+      }
+      if (assignedFilter === "unassigned") {
+        query = query.is("assigned_to", null);
+      } else if (assignedFilter && assignedFilter !== "all" && assignedFilter !== "mine") {
+        query = query.eq("assigned_to", assignedFilter);
       }
 
       const { data, error } = await query;
@@ -76,7 +81,7 @@ export function useTicketStats() {
   return useQuery({
     queryKey: ["ticket-stats"],
     queryFn: async () => {
-      const { data, error } = await supabase.from("tickets").select("status");
+      const { data, error } = await supabase.from("tickets").select("status, assigned_to");
       if (error) throw error;
       const stats = {
         total: data.length,
@@ -84,6 +89,7 @@ export function useTicketStats() {
         in_progress: data.filter((t) => t.status === "in_progress").length,
         resolved: data.filter((t) => t.status === "resolved").length,
         closed: data.filter((t) => t.status === "closed").length,
+        unassigned: data.filter((t) => !t.assigned_to).length,
       };
       return stats;
     },
