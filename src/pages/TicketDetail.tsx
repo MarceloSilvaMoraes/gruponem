@@ -153,6 +153,14 @@ export default function TicketDetail() {
               {ticket.contacts?.name || ticket.contacts?.phone}
               <span>•</span>
               {format(new Date(ticket.created_at), "dd/MM/yyyy HH:mm", { locale: ptBR })}
+              {(ticket as any).sector && (
+                <>
+                  <span>•</span>
+                  <Badge className="bg-primary/15 text-primary hover:bg-primary/15">
+                    Setor: {(ticket as any).sector}
+                  </Badge>
+                </>
+              )}
             </p>
           </div>
           {role === "admin" && (
