@@ -45,16 +45,29 @@ serve(async (req) => {
       phone: body.phone,
       keyword: body.keyword,
       hasDescription: Boolean(body.description),
+      name: body.name,
     }));
 
-    const phoneRaw = String(body.phone ?? "").replace(/\D/g, "");
     const description = String(body.description ?? "").trim();
 
-    if (!phoneRaw || !description) {
-      return json({ error: "phone and description are required" }, 400);
+    if (!description) {
+      return json({ error: "description is required" }, 400);
     }
 
     const name = body.name ? String(body.name) : null;
+    // phone é opcional. Se não vier, geramos um identificador sintético
+    // para manter o contato único (não dá para agrupar histórico sem telefone).
+    let phoneRaw = String(body.phone ?? "").replace(/\D/g, "");
+    if (!phoneRaw) {
+      const slug = (name ?? "anon")
+        .toLowerCase()
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .replace(/[^a-z0-9]/g, "")
+        .slice(0, 20) || "anon";
+      phoneRaw = `typebot-${slug}-${Date.now()}`;
+    }
+
     const keyword = body.keyword ? String(body.keyword).toLowerCase().trim() : null;
     const subject =
       (body.subject && String(body.subject).slice(0, 120)) ||
