@@ -393,7 +393,6 @@ export default function TicketDetail() {
           </TabsContent>
         </Tabs>
       </div>
-    </div>
   );
 }
 
