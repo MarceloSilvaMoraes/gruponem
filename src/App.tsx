@@ -4,9 +4,13 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider } from "@/hooks/useAuth";
+import { ThemeProvider } from "@/hooks/useTheme";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
-import { AppHeader } from "@/components/AppHeader";
+import { AppLayout } from "@/components/AppLayout";
+import { PlaceholderPage } from "@/components/PlaceholderPage";
+import { Monitor, Camera, Package, FileText, MessageSquareText } from "lucide-react";
 import Index from "./pages/Index.tsx";
+import Chamados from "./pages/Chamados.tsx";
 import TicketDetail from "./pages/TicketDetail.tsx";
 import Auth from "./pages/Auth.tsx";
 import TeamManagement from "./pages/TeamManagement.tsx";
@@ -18,54 +22,92 @@ const queryClient = new QueryClient();
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
-    <TooltipProvider>
-      <Toaster />
-      <Sonner />
-      <BrowserRouter>
-        <AuthProvider>
-          <Routes>
-            <Route path="/auth" element={<Auth />} />
-            <Route path="/" element={<ProtectedRoute><Index /></ProtectedRoute>} />
-            <Route path="/ticket/:id" element={<ProtectedRoute><TicketDetail /></ProtectedRoute>} />
-            <Route
-              path="/team"
-              element={
-                <ProtectedRoute adminOnly>
-                  <div className="min-h-screen bg-background">
-                    <AppHeader />
-                    <TeamManagement />
-                  </div>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/metrics"
-              element={
-                <ProtectedRoute adminOnly>
-                  <div className="min-h-screen bg-background">
-                    <AppHeader />
-                    <Metrics />
-                  </div>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/triggers"
-              element={
-                <ProtectedRoute adminOnly>
-                  <div className="min-h-screen bg-background">
-                    <AppHeader />
-                    <Triggers />
-                  </div>
-                </ProtectedRoute>
-              }
-            />
-            {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-            <Route path="*" element={<NotFound />} />
-          </Routes>
-        </AuthProvider>
-      </BrowserRouter>
-    </TooltipProvider>
+    <ThemeProvider>
+      <TooltipProvider>
+        <Toaster />
+        <Sonner />
+        <BrowserRouter>
+          <AuthProvider>
+            <Routes>
+              <Route path="/auth" element={<Auth />} />
+              <Route
+                element={
+                  <ProtectedRoute>
+                    <AppLayout />
+                  </ProtectedRoute>
+                }
+              >
+                <Route path="/" element={<Index />} />
+                <Route path="/chamados" element={<Chamados />} />
+                <Route path="/ticket/:id" element={<TicketDetail />} />
+                <Route
+                  path="/computadores"
+                  element={
+                    <PlaceholderPage
+                      title="Computadores"
+                      description="Inventário e status dos equipamentos da rede"
+                      icon={Monitor}
+                    />
+                  }
+                />
+                <Route
+                  path="/cameras"
+                  element={
+                    <PlaceholderPage
+                      title="Câmeras"
+                      description="Monitoramento de câmeras e CFTV"
+                      icon={Camera}
+                    />
+                  }
+                />
+                <Route
+                  path="/estoque"
+                  element={
+                    <PlaceholderPage
+                      title="Estoque"
+                      description="Controle de peças, periféricos e suprimentos"
+                      icon={Package}
+                    />
+                  }
+                />
+                <Route
+                  path="/orcamentos"
+                  element={
+                    <PlaceholderPage
+                      title="Orçamentos"
+                      description="Solicitações e aprovações de orçamento"
+                      icon={FileText}
+                    />
+                  }
+                />
+                <Route
+                  path="/chat-ia"
+                  element={
+                    <PlaceholderPage
+                      title="Chat IA"
+                      description="Assistente inteligente para suporte"
+                      icon={MessageSquareText}
+                    />
+                  }
+                />
+              </Route>
+              <Route
+                element={
+                  <ProtectedRoute adminOnly>
+                    <AppLayout />
+                  </ProtectedRoute>
+                }
+              >
+                <Route path="/team" element={<TeamManagement />} />
+                <Route path="/metrics" element={<Metrics />} />
+                <Route path="/triggers" element={<Triggers />} />
+              </Route>
+              <Route path="*" element={<NotFound />} />
+            </Routes>
+          </AuthProvider>
+        </BrowserRouter>
+      </TooltipProvider>
+    </ThemeProvider>
   </QueryClientProvider>
 );
 
