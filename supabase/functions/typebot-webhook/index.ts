@@ -170,12 +170,19 @@ serve(async (req) => {
       ticket = newTicket;
     }
 
-    // 3. Save message log of the typebot submission
+    // 3. Save message log of the typebot submission.
+    // Header identifies the requester: name + sector when available,
+    // falling back to the keyword that triggered the flow.
+    const headerParts: string[] = [];
+    if (name) headerParts.push(name);
+    if (sector) headerParts.push(sector);
+    if (headerParts.length === 0 && keyword) headerParts.push(keyword);
+    const header = headerParts.length > 0 ? headerParts.join(" • ") : "Typebot";
     await supabase.from("messages").insert({
       ticket_id: ticket!.id,
       contact_id: contact.id,
       direction: "inbound",
-      content: `[Typebot${keyword ? ` • ${keyword}` : ""}]\n${description}`,
+      content: `[${header}]\n${description}`,
       message_type: "text",
     });
 
