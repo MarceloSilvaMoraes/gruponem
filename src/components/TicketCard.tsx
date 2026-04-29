@@ -90,6 +90,11 @@ export function TicketCard({
               {ticket.category}
             </Badge>
           )}
+          {(ticket as any).sector && (
+            <Badge className="text-[10px] h-4 bg-primary/15 text-primary hover:bg-primary/15">
+              {(ticket as any).sector}
+            </Badge>
+          )}
           <span className="flex items-center gap-1 ml-auto">
             <UserCheck className="h-3 w-3" />
             {assignee?.display_name ?? <em className="text-rose-500">não atribuído</em>}
