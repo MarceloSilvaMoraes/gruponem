@@ -64,6 +64,10 @@ serve(async (req) => {
       "description", "pergunta", "Pergunta", "question",
       "mensagem", "message", "msg", "duvida", "dúvida", "texto", "text", "problema"
     );
+    const sectorInput = pick(
+      "sector", "setor", "Setor", "polo", "Polo", "bandeira", "Bandeira",
+      "unidade", "Unidade", "area", "área", "Area"
+    );
 
     // Fallback: if still nothing, use the first non-empty string field that
     // isn't obviously the name/phone/keyword.
@@ -72,7 +76,8 @@ serve(async (req) => {
       for (const [k, v] of Object.entries(body)) {
         if (!v || typeof v !== "string") continue;
         const lk = k.toLowerCase();
-        if (["name", "nome", "phone", "telefone", "keyword"].includes(lk)) continue;
+        if (["name", "nome", "phone", "telefone", "keyword",
+             "sector", "setor", "polo", "bandeira", "unidade", "area"].includes(lk)) continue;
         if (String(v).trim().length > 0) { finalDescription = v; break; }
       }
     }
@@ -80,6 +85,7 @@ serve(async (req) => {
     console.log("Typebot parsed:", JSON.stringify({
       name: nameInput,
       description: finalDescription,
+      sector: sectorInput,
       fields: Object.keys(body),
     }));
 
@@ -88,6 +94,7 @@ serve(async (req) => {
       "Chamado aberto pelo fluxo do Typebot sem descrição informada.";
 
     const name = nameInput ? String(nameInput).trim() : null;
+    const sector = sectorInput ? String(sectorInput).trim().slice(0, 80) : null;
     // phone é opcional. Se não vier, geramos um identificador sintético
     // para manter o contato único (não dá para agrupar histórico sem telefone).
     let phoneRaw = String(body.phone ?? "").replace(/\D/g, "");
@@ -138,6 +145,7 @@ serve(async (req) => {
           priority,
           source: "typebot",
           trigger_keyword: keyword,
+          sector,
           ai_summary: description.slice(0, 240),
         })
         .eq("id", ticket.id);
@@ -152,6 +160,7 @@ serve(async (req) => {
           priority,
           source: "typebot",
           trigger_keyword: keyword,
+          sector,
           ai_summary: description.slice(0, 240),
           status: "open",
         })
