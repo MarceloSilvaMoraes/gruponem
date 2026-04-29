@@ -17,7 +17,6 @@ import { useTicket, useTicketMessages } from "@/hooks/useTickets";
 import { useTeam, useTicketActivity, useTicketNotes } from "@/hooks/useTeam";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
-import { AppHeader } from "@/components/AppHeader";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -121,10 +120,7 @@ export default function TicketDetail() {
 
   if (!ticket) {
     return (
-      <div className="min-h-screen bg-background">
-        <AppHeader />
-        <p className="text-center text-muted-foreground py-16">Carregando...</p>
-      </div>
+      <p className="text-center text-muted-foreground py-16">Carregando...</p>
     );
   }
 
@@ -136,9 +132,7 @@ export default function TicketDetail() {
     team?.find((m) => m.user_id === uid)?.display_name ?? "—";
 
   return (
-    <div className="min-h-screen bg-background">
-      <AppHeader />
-      <div className="max-w-5xl mx-auto p-4 md:p-6">
+    <div className="max-w-5xl mx-auto p-4 md:p-6">
         {/* Header */}
         <div className="flex items-center gap-3 mb-4">
           <Button variant="ghost" size="icon" onClick={() => navigate("/")}>
@@ -399,7 +393,6 @@ export default function TicketDetail() {
           </TabsContent>
         </Tabs>
       </div>
-    </div>
   );
 }
 
