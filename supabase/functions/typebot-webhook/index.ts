@@ -41,30 +41,57 @@ serve(async (req) => {
       return json({ error: "Invalid JSON" }, 400);
     }
 
-    const nameInput = body.name ?? body.nome ?? body.Nome ?? body.NAME;
-    const descriptionInput =
-      body.description ??
-      body.pergunta ??
-      body.Pergunta ??
-      body.question ??
-      body.Question ??
-      body.mensagem ??
-      body.Mensagem ??
-      body.message ??
-      body.Message;
+    // Log the RAW body so we can see exactly what Typebot is sending
+    console.log("Typebot RAW body:", JSON.stringify(body));
 
-    console.log("Typebot submission received:", JSON.stringify({
-      hasPhone: Boolean(String(body.phone ?? "").replace(/\D/g, "")),
-      keyword: body.keyword,
-      hasDescription: Boolean(descriptionInput),
+    // Case-insensitive field lookup helper
+    const pick = (...keys: string[]) => {
+      for (const k of keys) {
+        for (const bk of Object.keys(body)) {
+          if (bk.toLowerCase() === k.toLowerCase()) {
+            const v = body[bk];
+            if (v !== undefined && v !== null && String(v).trim() !== "") {
+              return v;
+            }
+          }
+        }
+      }
+      return undefined;
+    };
+
+    const nameInput = pick("name", "nome", "Nome", "username", "user_name", "cliente");
+    const descriptionInput = pick(
+      "description", "pergunta", "Pergunta", "question",
+      "mensagem", "message", "msg", "duvida", "dúvida", "texto", "text", "problema"
+    );
+
+    // Fallback: if still nothing, use the first non-empty string field that
+    // isn't obviously the name/phone/keyword.
+    let finalDescription = descriptionInput;
+    if (!finalDescription) {
+      for (const [k, v] of Object.entries(body)) {
+        if (!v || typeof v !== "string") continue;
+        const lk = k.toLowerCase();
+        if (["name", "nome", "phone", "telefone", "keyword"].includes(lk)) continue;
+        if (String(v).trim().length > 0) { finalDescription = v; break; }
+      }
+    }
+
+    console.log("Typebot parsed:", JSON.stringify({
       name: nameInput,
+      description: finalDescription,
       fields: Object.keys(body),
     }));
 
-    const description = String(descriptionInput ?? "").trim();
+    const description = String(finalDescription ?? "").trim();
 
     if (!description) {
-      return json({ error: "description is required" }, 400);
+      return json({
+        error: "description is required",
+        hint: "Nenhum campo com texto foi reconhecido. Confira os nomes das variáveis no Typebot.",
+        receivedFields: Object.keys(body),
+        receivedBody: body,
+      }, 400);
     }
 
     const name = nameInput ? String(nameInput).trim() : null;
