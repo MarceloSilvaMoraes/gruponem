@@ -11,11 +11,11 @@ const corsHeaders = {
  * Endpoint público para o Typebot.
  * POST JSON esperado:
  * {
- *   "phone": "5511999999999",            // obrigatório (somente dígitos, com DDI)
- *   "name": "João da Silva",              // opcional
+ *   "phone": "5511999999999",            // opcional (somente dígitos, com DDI)
+ *   "name": "João da Silva",              // opcional; também aceita nome/Nome
  *   "keyword": "suporte01",               // opcional, palavra-chave que originou o fluxo
  *   "subject": "Sem acesso ao ERP",       // opcional, vira título
- *   "description": "Texto detalhado...",  // obrigatório, vira descrição do chamado
+ *   "description": "Texto detalhado...",  // obrigatório; também aceita pergunta/Pergunta/mensagem
  *   "category": "suporte",                // opcional
  *   "priority": "medium"                  // opcional: low | medium | high | urgent
  * }
@@ -41,20 +41,33 @@ serve(async (req) => {
       return json({ error: "Invalid JSON" }, 400);
     }
 
+    const nameInput = body.name ?? body.nome ?? body.Nome ?? body.NAME;
+    const descriptionInput =
+      body.description ??
+      body.pergunta ??
+      body.Pergunta ??
+      body.question ??
+      body.Question ??
+      body.mensagem ??
+      body.Mensagem ??
+      body.message ??
+      body.Message;
+
     console.log("Typebot submission received:", JSON.stringify({
-      phone: body.phone,
+      hasPhone: Boolean(String(body.phone ?? "").replace(/\D/g, "")),
       keyword: body.keyword,
-      hasDescription: Boolean(body.description),
-      name: body.name,
+      hasDescription: Boolean(descriptionInput),
+      name: nameInput,
+      fields: Object.keys(body),
     }));
 
-    const description = String(body.description ?? "").trim();
+    const description = String(descriptionInput ?? "").trim();
 
     if (!description) {
       return json({ error: "description is required" }, 400);
     }
 
-    const name = body.name ? String(body.name) : null;
+    const name = nameInput ? String(nameInput).trim() : null;
     // phone é opcional. Se não vier, geramos um identificador sintético
     // para manter o contato único (não dá para agrupar histórico sem telefone).
     let phoneRaw = String(body.phone ?? "").replace(/\D/g, "");
