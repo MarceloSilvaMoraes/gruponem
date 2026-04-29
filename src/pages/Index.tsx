@@ -4,6 +4,7 @@ import { Search, Trash2, X } from "lucide-react";
 import { useTickets } from "@/hooks/useTickets";
 import { TicketCard } from "@/components/TicketCard";
 import { StatsBar } from "@/components/StatsBar";
+import { TopPerformers } from "@/components/TopPerformers";
 import { AppHeader } from "@/components/AppHeader";
 import { useAuth } from "@/hooks/useAuth";
 import { Input } from "@/components/ui/input";
@@ -115,6 +116,8 @@ export default function Index() {
         </div>
 
         <StatsBar />
+
+        <TopPerformers />
 
         <div className="flex flex-col gap-3">
           <Tabs value={scope} onValueChange={(v) => setScope(v as any)}>
