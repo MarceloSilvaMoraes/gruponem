@@ -83,16 +83,9 @@ serve(async (req) => {
       fields: Object.keys(body),
     }));
 
-    const description = String(finalDescription ?? "").trim();
-
-    if (!description) {
-      return json({
-        error: "description is required",
-        hint: "Nenhum campo com texto foi reconhecido. Confira os nomes das variáveis no Typebot.",
-        receivedFields: Object.keys(body),
-        receivedBody: body,
-      }, 400);
-    }
+    const description =
+      String(finalDescription ?? "").trim() ||
+      "Chamado aberto pelo fluxo do Typebot sem descrição informada.";
 
     const name = nameInput ? String(nameInput).trim() : null;
     // phone é opcional. Se não vier, geramos um identificador sintético
