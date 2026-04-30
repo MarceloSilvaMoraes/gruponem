@@ -14,6 +14,78 @@ export type Database = {
   }
   public: {
     Tables: {
+      app_settings: {
+        Row: {
+          id: string
+          key: string
+          updated_at: string
+          updated_by: string | null
+          value: string | null
+        }
+        Insert: {
+          id?: string
+          key: string
+          updated_at?: string
+          updated_by?: string | null
+          value?: string | null
+        }
+        Update: {
+          id?: string
+          key?: string
+          updated_at?: string
+          updated_by?: string | null
+          value?: string | null
+        }
+        Relationships: []
+      }
+      computers: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          hostname: string | null
+          id: string
+          ip_address: string | null
+          mac_address: string | null
+          name: string
+          notes: string | null
+          operating_system: string | null
+          responsible: string | null
+          sector: string | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          hostname?: string | null
+          id?: string
+          ip_address?: string | null
+          mac_address?: string | null
+          name: string
+          notes?: string | null
+          operating_system?: string | null
+          responsible?: string | null
+          sector?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          hostname?: string | null
+          id?: string
+          ip_address?: string | null
+          mac_address?: string | null
+          name?: string
+          notes?: string | null
+          operating_system?: string | null
+          responsible?: string | null
+          sector?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       contacts: {
         Row: {
           created_at: string
