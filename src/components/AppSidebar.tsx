@@ -10,6 +10,7 @@ import {
   BarChart3,
   Webhook,
   Headphones,
+  Settings as SettingsIcon,
 } from "lucide-react";
 import { NavLink, useLocation } from "react-router-dom";
 import {
@@ -24,6 +25,7 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar";
 import { useAuth } from "@/hooks/useAuth";
+import { useAppName } from "@/hooks/useAppName";
 
 const mainItems = [
   { title: "Dashboard", url: "/", icon: LayoutDashboard },
@@ -38,6 +40,7 @@ const adminItems = [
   { title: "Equipe", url: "/team", icon: Users },
   { title: "Métricas", url: "/metrics", icon: BarChart3 },
   { title: "Gatilhos", url: "/triggers", icon: Webhook },
+  { title: "Configurações", url: "/configuracoes", icon: SettingsIcon },
 ];
 
 const aiItems = [{ title: "Chat IA", url: "/chat-ia", icon: MessageSquareText }];
@@ -47,6 +50,7 @@ export function AppSidebar() {
   const collapsed = state === "collapsed";
   const { pathname } = useLocation();
   const { role } = useAuth();
+  const { data: appName } = useAppName();
 
   const isActive = (url: string) =>
     url === "/" ? pathname === "/" : pathname.startsWith(url);
@@ -70,8 +74,8 @@ export function AppSidebar() {
             <Headphones className="h-5 w-5" />
           </div>
           {!collapsed && (
-            <div className="leading-tight">
-              <p className="font-display font-bold text-base">TechDesk Pro</p>
+            <div className="leading-tight min-w-0">
+              <p className="font-display font-bold text-base truncate">{appName || "Suporte"}</p>
               <p className="text-[10px] text-muted-foreground">Suporte de TI</p>
             </div>
           )}
