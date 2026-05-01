@@ -147,69 +147,6 @@ export default function Index() {
         ))}
       </div>
 
-      {/* NPS card */}
-      <Card className="shadow-sm">
-        <CardHeader className="flex flex-row items-center justify-between">
-          <CardTitle className="text-base flex items-center gap-2">
-            <Star className="h-4 w-4 text-amber-500 fill-amber-500" />
-            Satisfação dos Clientes (NPS)
-          </CardTitle>
-          <span className="text-xs text-muted-foreground">
-            {npsCount} avaliação{npsCount !== 1 ? "ões" : ""}
-          </span>
-        </CardHeader>
-        <CardContent className="pt-0">
-          {npsCount === 0 ? (
-            <p className="text-sm text-muted-foreground py-4 text-center">
-              Nenhuma avaliação recebida ainda.
-            </p>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-[200px_1fr] gap-6 items-center">
-              <div className="text-center">
-                <p className="text-5xl font-display font-bold">{npsAvg.toFixed(1)}</p>
-                <p className="text-xs text-muted-foreground">média de 5</p>
-                <div className="flex justify-center mt-2 gap-0.5">
-                  {[1, 2, 3, 4, 5].map((n) => (
-                    <Star
-                      key={n}
-                      className={`h-4 w-4 ${
-                        n <= Math.round(npsAvg)
-                          ? "fill-amber-500 text-amber-500"
-                          : "text-muted-foreground/40"
-                      }`}
-                    />
-                  ))}
-                </div>
-              </div>
-              <div className="space-y-1.5">
-                {[5, 4, 3, 2, 1].map((n) => {
-                  const item = npsDist.find((d) => d.n === n)!;
-                  const pct = (item.count / npsMaxBar) * 100;
-                  const color =
-                    n >= 4 ? "bg-emerald-500" : n === 3 ? "bg-amber-500" : "bg-rose-500";
-                  return (
-                    <div key={n} className="flex items-center gap-2 text-xs">
-                      <span className="w-6 tabular-nums text-muted-foreground">
-                        {n}★
-                      </span>
-                      <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden">
-                        <div
-                          className={`h-full ${color} transition-all`}
-                          style={{ width: `${pct}%` }}
-                        />
-                      </div>
-                      <span className="w-8 text-right tabular-nums text-muted-foreground">
-                        {item.count}
-                      </span>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
       {/* Two-column area */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         {/* Recent tickets */}
