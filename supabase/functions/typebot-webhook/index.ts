@@ -9,7 +9,11 @@ const corsHeaders = {
 
 /**
  * Endpoint público para o Typebot.
- * POST JSON esperado:
+ * POST JSON esperado.
+ *
+ * Suporta DOIS modos:
+ *
+ * 1) Modo "abertura de chamado" (modo legado):
  * {
  *   "phone": "5511999999999",            // opcional (somente dígitos, com DDI)
  *   "name": "João da Silva",              // opcional; também aceita nome/Nome
@@ -19,6 +23,20 @@ const corsHeaders = {
  *   "category": "suporte",                // opcional
  *   "priority": "medium"                  // opcional: low | medium | high | urgent
  * }
+ *
+ * 2) Modo "evento de fluxo" (recomendado para registrar TODA a jornada):
+ *    {
+ *      "phone": "5511999999999",          // ou ticket_id direto
+ *      "ticket_id": "uuid",               // opcional, se já souber
+ *      "event": "flow_started" | "flow_step" | "flow_ended" | "nps",
+ *      "name": "...", "sector": "...",    // identificação (no flow_started)
+ *      "step": "Etapa 2 — categoria",     // descritivo da etapa (flow_step)
+ *      "question": "Qual o problema?",    // opcional (flow_step)
+ *      "answer": "Internet caiu",         // resposta do usuário (flow_step)
+ *      "message": "Texto livre do bot",   // opcional (qualquer evento)
+ *      "score": 5,                        // 1..5 (event=nps)
+ *      "comment": "Atendimento ótimo"     // opcional (event=nps)
+ *    }
  */
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
@@ -58,6 +76,14 @@ serve(async (req) => {
       }
       return undefined;
     };
+
+    // ========= MODO 2: evento de fluxo / NPS =========
+    const eventRaw = pick("event", "tipo", "type");
+    const event = eventRaw ? String(eventRaw).toLowerCase().trim() : null;
+
+    if (event && ["flow_started", "flow_step", "flow_ended", "nps", "bot_message", "user_message"].includes(event)) {
+      return await handleFlowEvent(supabase, body, pick, event);
+    }
 
     const nameInput = pick("name", "nome", "Nome", "username", "user_name", "cliente");
     const descriptionInput = pick(
@@ -184,6 +210,7 @@ serve(async (req) => {
       direction: "inbound",
       content: `[${header}]\n${description}`,
       message_type: "text",
+      sender_label: "user",
     });
 
     return json({ ok: true, ticket_id: ticket!.id, contact_id: contact.id });
@@ -198,4 +225,213 @@ function json(data: unknown, status = 200) {
     status,
     headers: { ...corsHeaders, "Content-Type": "application/json" },
   });
+}
+
+// ============================================================
+// MODO 2 — eventos de fluxo do Typebot
+// ============================================================
+async function handleFlowEvent(
+  supabase: any,
+  body: any,
+  pick: (...keys: string[]) => any,
+  event: string,
+) {
+  const ticketIdInput = pick("ticket_id", "ticketId");
+  const phoneInput = pick("phone", "telefone", "whatsapp");
+  const nameInput = pick("name", "nome");
+  const sectorInput = pick("sector", "setor", "polo", "bandeira", "unidade");
+  const stepInput = pick("step", "etapa", "stage");
+  const questionInput = pick("question", "pergunta");
+  const answerInput = pick("answer", "resposta");
+  const messageInput = pick("message", "msg", "texto", "text", "content");
+  const scoreInput = pick("score", "nota", "nps");
+  const commentInput = pick("comment", "comentario", "comentário");
+
+  // 1) Localizar ou criar contato/ticket
+  let ticket: any = null;
+  let contactId: string | null = null;
+
+  if (ticketIdInput) {
+    const { data } = await supabase
+      .from("tickets")
+      .select("*")
+      .eq("id", String(ticketIdInput))
+      .maybeSingle();
+    ticket = data;
+    contactId = data?.contact_id ?? null;
+  }
+
+  if (!ticket) {
+    let phoneRaw = String(phoneInput ?? "").replace(/\D/g, "");
+    if (!phoneRaw && nameInput) {
+      const slug = String(nameInput)
+        .toLowerCase()
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .replace(/[^a-z0-9]/g, "")
+        .slice(0, 20) || "anon";
+      phoneRaw = `typebot-${slug}`;
+    }
+    if (phoneRaw) {
+      const { data: contact } = await supabase
+        .from("contacts")
+        .upsert(
+          { phone: phoneRaw, name: nameInput ? String(nameInput) : null },
+          { onConflict: "phone" }
+        )
+        .select()
+        .single();
+      if (contact) {
+        contactId = contact.id;
+        const { data: existing } = await supabase
+          .from("tickets")
+          .select("*")
+          .eq("contact_id", contact.id)
+          .in("status", ["open", "in_progress"])
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        ticket = existing;
+
+        if (!ticket && event === "flow_started") {
+          const { data: newTicket } = await supabase
+            .from("tickets")
+            .insert({
+              contact_id: contact.id,
+              subject: stepInput
+                ? `Fluxo: ${String(stepInput).slice(0, 100)}`
+                : "Atendimento via Typebot",
+              description: messageInput ? String(messageInput) : "Fluxo iniciado pelo cliente",
+              source: "typebot",
+              sector: sectorInput ? String(sectorInput).slice(0, 80) : null,
+              status: "open",
+              priority: "medium",
+            })
+            .select()
+            .single();
+          ticket = newTicket;
+        }
+      }
+    }
+  }
+
+  if (!ticket) {
+    return json(
+      { error: "Ticket não encontrado. Envie ticket_id, phone ou use event=flow_started." },
+      404,
+    );
+  }
+
+  // 2) Trata cada tipo de evento
+  if (event === "nps") {
+    const score = Number(scoreInput);
+    if (!score || score < 1 || score > 5) {
+      return json({ error: "score deve ser número entre 1 e 5" }, 400);
+    }
+    await supabase
+      .from("tickets")
+      .update({
+        nps_score: score,
+        nps_comment: commentInput ? String(commentInput).slice(0, 500) : null,
+        nps_submitted_at: new Date().toISOString(),
+      })
+      .eq("id", ticket.id);
+
+    await supabase.from("messages").insert({
+      ticket_id: ticket.id,
+      contact_id: contactId,
+      direction: "inbound",
+      content: `⭐ NPS: ${score}/5${commentInput ? `\n"${String(commentInput)}"` : ""}`,
+      message_type: "text",
+      sender_label: "nps",
+    });
+
+    return json({ ok: true, ticket_id: ticket.id, nps: score });
+  }
+
+  // Eventos de fluxo (started/step/ended/bot_message/user_message)
+  let label: string;
+  let direction: "inbound" | "outbound" = "inbound";
+  let content: string;
+
+  switch (event) {
+    case "flow_started": {
+      label = "system";
+      direction = "inbound";
+      const ident: string[] = [];
+      if (nameInput) ident.push(String(nameInput));
+      if (sectorInput) ident.push(String(sectorInput));
+      content =
+        `▶ Fluxo iniciado${stepInput ? ` — ${stepInput}` : ""}` +
+        (ident.length ? `\nCliente: ${ident.join(" • ")}` : "") +
+        (messageInput ? `\n${messageInput}` : "");
+      break;
+    }
+    case "flow_ended": {
+      label = "system";
+      direction = "inbound";
+      content =
+        `■ Fluxo encerrado${stepInput ? ` — ${stepInput}` : ""}` +
+        (messageInput ? `\n${messageInput}` : "");
+      break;
+    }
+    case "flow_step": {
+      label = "bot";
+      direction = "outbound";
+      const parts: string[] = [];
+      if (stepInput) parts.push(`[${stepInput}]`);
+      if (questionInput) parts.push(String(questionInput));
+      if (answerInput) parts.push(`↳ Resposta: ${answerInput}`);
+      if (messageInput && !questionInput && !answerInput) parts.push(String(messageInput));
+      content = parts.join("\n") || "Etapa do fluxo";
+      // resposta do usuário em uma etapa registramos como inbound separado
+      if (answerInput) {
+        await supabase.from("messages").insert({
+          ticket_id: ticket.id,
+          contact_id: contactId,
+          direction: "outbound",
+          content: questionInput
+            ? `[${stepInput ?? "Etapa"}] ${questionInput}`
+            : `[${stepInput ?? "Etapa"}]`,
+          message_type: "text",
+          sender_label: "bot",
+        });
+        await supabase.from("messages").insert({
+          ticket_id: ticket.id,
+          contact_id: contactId,
+          direction: "inbound",
+          content: String(answerInput),
+          message_type: "text",
+          sender_label: "user",
+        });
+        return json({ ok: true, ticket_id: ticket.id });
+      }
+      break;
+    }
+    case "bot_message": {
+      label = "bot";
+      direction = "outbound";
+      content = String(messageInput ?? "Mensagem do bot");
+      break;
+    }
+    case "user_message": {
+      label = "user";
+      direction = "inbound";
+      content = String(messageInput ?? answerInput ?? "");
+      break;
+    }
+    default:
+      return json({ error: `Evento desconhecido: ${event}` }, 400);
+  }
+
+  await supabase.from("messages").insert({
+    ticket_id: ticket.id,
+    contact_id: contactId,
+    direction,
+    content,
+    message_type: "text",
+    sender_label: label,
+  });
+
+  return json({ ok: true, ticket_id: ticket.id, event });
 }
