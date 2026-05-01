@@ -11,6 +11,11 @@ import {
   UserPlus,
   CheckCircle2,
   Trash2,
+  Sparkles,
+  Star,
+  PlayCircle,
+  StopCircle,
+  User,
 } from "lucide-react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useTicket, useTicketMessages } from "@/hooks/useTickets";
@@ -130,6 +135,10 @@ export default function TicketDetail() {
   const canManage = role === "admin" || isMine;
   const memberName = (uid?: string | null) =>
     team?.find((m) => m.user_id === uid)?.display_name ?? "—";
+
+  const npsScore: number | null = (ticket as any).nps_score ?? null;
+  const npsComment: string | null = (ticket as any).nps_comment ?? null;
+  const npsAt: string | null = (ticket as any).nps_submitted_at ?? null;
 
   return (
     <div className="max-w-5xl mx-auto p-4 md:p-6">
@@ -277,6 +286,9 @@ export default function TicketDetail() {
           </div>
         )}
 
+        {/* NPS card */}
+        <NpsCard score={npsScore} comment={npsComment} submittedAt={npsAt} />
+
         {/* Tabs */}
         <Tabs defaultValue="conversation">
           <TabsList>
@@ -293,23 +305,7 @@ export default function TicketDetail() {
           <TabsContent value="conversation" className="bg-card rounded-xl border p-4 mt-3">
             <div className="space-y-3 max-h-[480px] overflow-y-auto pr-1">
               {messages?.map((msg: any) => (
-                <div
-                  key={msg.id}
-                  className={`flex ${msg.direction === "outbound" ? "justify-end" : "justify-start"}`}
-                >
-                  <div
-                    className={`max-w-[75%] rounded-2xl px-4 py-2.5 text-sm ${
-                      msg.direction === "outbound"
-                        ? "bg-primary text-primary-foreground rounded-br-md"
-                        : "bg-secondary text-secondary-foreground rounded-bl-md"
-                    }`}
-                  >
-                    <p className="whitespace-pre-wrap break-words">{msg.content}</p>
-                    <p className={`text-[10px] mt-1 ${msg.direction === "outbound" ? "text-primary-foreground/70" : "text-muted-foreground"}`}>
-                      {format(new Date(msg.created_at), "HH:mm")}
-                    </p>
-                  </div>
-                </div>
+                <MessageBubble key={msg.id} msg={msg} />
               ))}
               {(!messages || messages.length === 0) && (
                 <p className="text-center text-muted-foreground text-sm py-8">
@@ -393,6 +389,140 @@ export default function TicketDetail() {
           </TabsContent>
         </Tabs>
       </div>
+  );
+}
+
+// ============== Componentes auxiliares ==============
+function MessageBubble({ msg }: { msg: any }) {
+  const label: string | null = msg.sender_label ?? null;
+
+  // Eventos de sistema (flow_started / flow_ended) — barra centralizada
+  if (label === "system") {
+    const isStart = msg.content?.startsWith("▶");
+    const isEnd = msg.content?.startsWith("■");
+    return (
+      <div className="flex justify-center my-2">
+        <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-muted/60 border text-[11px] text-muted-foreground">
+          {isStart ? (
+            <PlayCircle className="h-3 w-3 text-primary" />
+          ) : isEnd ? (
+            <StopCircle className="h-3 w-3 text-destructive" />
+          ) : (
+            <Sparkles className="h-3 w-3" />
+          )}
+          <span className="whitespace-pre-wrap text-center">{msg.content}</span>
+          <span className="opacity-70">• {format(new Date(msg.created_at), "HH:mm")}</span>
+        </div>
+      </div>
+    );
+  }
+
+  // Mensagem NPS — destaque
+  if (label === "nps") {
+    return (
+      <div className="flex justify-center my-2">
+        <div className="inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-700 dark:text-amber-400 text-xs">
+          <Star className="h-3.5 w-3.5 fill-current" />
+          <span className="whitespace-pre-wrap font-medium">{msg.content}</span>
+        </div>
+      </div>
+    );
+  }
+
+  const isBot = label === "bot";
+  const isOutbound = msg.direction === "outbound";
+
+  return (
+    <div className={`flex ${isOutbound ? "justify-end" : "justify-start"} gap-2`}>
+      {!isOutbound && (
+        <div className="h-7 w-7 shrink-0 rounded-full bg-muted flex items-center justify-center">
+          {isBot ? (
+            <Bot className="h-3.5 w-3.5 text-primary" />
+          ) : (
+            <User className="h-3.5 w-3.5 text-muted-foreground" />
+          )}
+        </div>
+      )}
+      <div
+        className={`max-w-[75%] rounded-2xl px-4 py-2.5 text-sm ${
+          isOutbound
+            ? isBot
+              ? "bg-primary/15 text-foreground border border-primary/30 rounded-br-md"
+              : "bg-primary text-primary-foreground rounded-br-md"
+            : "bg-secondary text-secondary-foreground rounded-bl-md"
+        }`}
+      >
+        {isBot && (
+          <div className="flex items-center gap-1 mb-1">
+            <Bot className="h-3 w-3 text-primary" />
+            <span className="text-[10px] font-semibold text-primary uppercase tracking-wide">
+              IA / Bot
+            </span>
+          </div>
+        )}
+        <p className="whitespace-pre-wrap break-words">{msg.content}</p>
+        <p
+          className={`text-[10px] mt-1 ${
+            isOutbound && !isBot ? "text-primary-foreground/70" : "text-muted-foreground"
+          }`}
+        >
+          {format(new Date(msg.created_at), "HH:mm")}
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function NpsCard({
+  score,
+  comment,
+  submittedAt,
+}: {
+  score: number | null;
+  comment: string | null;
+  submittedAt: string | null;
+}) {
+  if (!score) {
+    return (
+      <div className="bg-muted/40 rounded-xl border border-dashed p-3 mb-4 flex items-center gap-2 text-xs text-muted-foreground">
+        <Star className="h-4 w-4" />
+        Aguardando avaliação NPS do cliente (1 a 5).
+      </div>
+    );
+  }
+  const tone =
+    score >= 4
+      ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-700 dark:text-emerald-400"
+      : score === 3
+      ? "bg-amber-500/10 border-amber-500/30 text-amber-700 dark:text-amber-400"
+      : "bg-rose-500/10 border-rose-500/30 text-rose-700 dark:text-rose-400";
+
+  return (
+    <div className={`rounded-xl border p-4 mb-4 ${tone}`}>
+      <div className="flex items-center gap-3">
+        <div className="flex items-center gap-0.5">
+          {[1, 2, 3, 4, 5].map((n) => (
+            <Star
+              key={n}
+              className={`h-5 w-5 ${n <= score ? "fill-current" : "opacity-30"}`}
+            />
+          ))}
+        </div>
+        <div className="flex-1">
+          <p className="text-sm font-semibold">
+            Avaliação NPS: {score}/5
+          </p>
+          {submittedAt && (
+            <p className="text-[11px] opacity-80">
+              Recebida em {format(new Date(submittedAt), "dd/MM/yyyy HH:mm")}
+            </p>
+          )}
+        </div>
+      </div>
+      {comment && (
+        <p className="text-sm mt-2 italic opacity-90">"{comment}"</p>
+      )}
+    </div>
   );
 }
 

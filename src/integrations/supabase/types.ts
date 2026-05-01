@@ -121,6 +121,7 @@ export type Database = {
           direction: Database["public"]["Enums"]["message_direction"]
           id: string
           message_type: string
+          sender_label: string | null
           ticket_id: string
           whatsapp_message_id: string | null
         }
@@ -131,6 +132,7 @@ export type Database = {
           direction?: Database["public"]["Enums"]["message_direction"]
           id?: string
           message_type?: string
+          sender_label?: string | null
           ticket_id: string
           whatsapp_message_id?: string | null
         }
@@ -141,6 +143,7 @@ export type Database = {
           direction?: Database["public"]["Enums"]["message_direction"]
           id?: string
           message_type?: string
+          sender_label?: string | null
           ticket_id?: string
           whatsapp_message_id?: string | null
         }
@@ -273,6 +276,9 @@ export type Database = {
           created_at: string
           description: string | null
           id: string
+          nps_comment: string | null
+          nps_score: number | null
+          nps_submitted_at: string | null
           priority: Database["public"]["Enums"]["ticket_priority"]
           sector: string | null
           source: string
@@ -289,6 +295,9 @@ export type Database = {
           created_at?: string
           description?: string | null
           id?: string
+          nps_comment?: string | null
+          nps_score?: number | null
+          nps_submitted_at?: string | null
           priority?: Database["public"]["Enums"]["ticket_priority"]
           sector?: string | null
           source?: string
@@ -305,6 +314,9 @@ export type Database = {
           created_at?: string
           description?: string | null
           id?: string
+          nps_comment?: string | null
+          nps_score?: number | null
+          nps_submitted_at?: string | null
           priority?: Database["public"]["Enums"]["ticket_priority"]
           sector?: string | null
           source?: string
