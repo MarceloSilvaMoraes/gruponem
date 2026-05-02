@@ -19,6 +19,8 @@ import Triggers from "./pages/Triggers.tsx";
 import Computadores from "./pages/Computadores.tsx";
 import Settings from "./pages/Settings.tsx";
 import NotFound from "./pages/NotFound.tsx";
+import Contatos from "./pages/Contatos.tsx";
+import MeusChamados, { MeuChamadoDetalhe } from "./pages/MeusChamados.tsx";
 
 const queryClient = new QueryClient();
 
@@ -32,6 +34,22 @@ const App = () => (
           <AuthProvider>
             <Routes>
               <Route path="/auth" element={<Auth />} />
+              <Route
+                path="/meus-chamados"
+                element={
+                  <ProtectedRoute endUserOnly>
+                    <MeusChamados />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/meus-chamados/:id"
+                element={
+                  <ProtectedRoute endUserOnly>
+                    <MeuChamadoDetalhe />
+                  </ProtectedRoute>
+                }
+              />
               <Route
                 element={
                   <ProtectedRoute>
@@ -92,6 +110,7 @@ const App = () => (
                 }
               >
                 <Route path="/team" element={<TeamManagement />} />
+                <Route path="/contatos" element={<Contatos />} />
                 <Route path="/metrics" element={<Metrics />} />
                 <Route path="/triggers" element={<Triggers />} />
                 <Route path="/configuracoes" element={<Settings />} />
