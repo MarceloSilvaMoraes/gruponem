@@ -273,14 +273,27 @@ async function handleFlowEvent(
       phoneRaw = `typebot-${slug}`;
     }
     if (phoneRaw) {
-      const { data: contact } = await supabase
+      // Tenta achar contato com variações de formato BR:
+      // ex: 5591993910084, 91993910084, 993910084, 559193910084 (sem 9), etc.
+      const variants = buildPhoneVariants(phoneRaw);
+      let contact: any = null;
+      const { data: existingContacts } = await supabase
         .from("contacts")
-        .upsert(
-          { phone: phoneRaw, name: nameInput ? String(nameInput) : null },
-          { onConflict: "phone" }
-        )
-        .select()
-        .single();
+        .select("*")
+        .in("phone", variants);
+      if (existingContacts && existingContacts.length > 0) {
+        contact = existingContacts[0];
+      } else {
+        const { data: created } = await supabase
+          .from("contacts")
+          .upsert(
+            { phone: phoneRaw, name: nameInput ? String(nameInput) : null },
+            { onConflict: "phone" }
+          )
+          .select()
+          .single();
+        contact = created;
+      }
       if (contact) {
         contactId = contact.id;
         const { data: existing } = await supabase
@@ -434,4 +447,40 @@ async function handleFlowEvent(
   });
 
   return json({ ok: true, ticket_id: ticket.id, event });
+}
+
+/**
+ * Gera variações de um telefone BR para tentar casar com o que está salvo.
+ * Aceita entradas como "+55 (91) 99391-0084", "91993910084", "993910084".
+ */
+function buildPhoneVariants(input: string): string[] {
+  const digits = String(input).replace(/\D/g, "");
+  if (!digits) return [];
+  const set = new Set<string>([digits]);
+
+  // Remove DDI 55 se presente
+  let local = digits.startsWith("55") && digits.length >= 12 ? digits.slice(2) : digits;
+  set.add(local);
+
+  // Se tem DDD + 9 dígitos (celular com 9), tenta também sem o "9" extra
+  if (local.length === 11) {
+    const ddd = local.slice(0, 2);
+    const rest = local.slice(2);
+    if (rest.startsWith("9")) {
+      set.add(ddd + rest.slice(1)); // sem 9
+    }
+  }
+  // Se tem DDD + 8 dígitos, tenta com o "9" adicionado
+  if (local.length === 10) {
+    const ddd = local.slice(0, 2);
+    const rest = local.slice(2);
+    set.add(ddd + "9" + rest);
+  }
+
+  // Adiciona versões com DDI 55 para todas as variações locais
+  const all = new Set<string>(set);
+  for (const v of set) {
+    if (!v.startsWith("55")) all.add("55" + v);
+  }
+  return Array.from(all);
 }
