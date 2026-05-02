@@ -6,6 +6,7 @@ import {
   Package,
   FileText,
   Users,
+  Contact,
   MessageSquareText,
   BarChart3,
   Webhook,
@@ -38,6 +39,7 @@ const mainItems = [
 
 const adminItems = [
   { title: "Equipe", url: "/team", icon: Users },
+  { title: "Contatos", url: "/contatos", icon: Contact },
   { title: "Métricas", url: "/metrics", icon: BarChart3 },
   { title: "Gatilhos", url: "/triggers", icon: Webhook },
   { title: "Configurações", url: "/configuracoes", icon: SettingsIcon },

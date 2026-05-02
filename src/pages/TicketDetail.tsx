@@ -154,6 +154,26 @@ export default function TicketDetail() {
             <p className="text-sm text-muted-foreground flex items-center gap-2 flex-wrap">
               <Phone className="h-3 w-3" />
               {ticket.contacts?.name || ticket.contacts?.phone}
+              {(ticket.contacts as any)?.email && (
+                <>
+                  <span>•</span>
+                  <span>{(ticket.contacts as any).email}</span>
+                </>
+              )}
+              {(ticket.contacts as any)?.role_title && (
+                <>
+                  <span>•</span>
+                  <span>{(ticket.contacts as any).role_title}</span>
+                </>
+              )}
+              {(ticket.contacts as any)?.sector && !((ticket as any).sector) && (
+                <>
+                  <span>•</span>
+                  <Badge className="bg-primary/15 text-primary hover:bg-primary/15">
+                    Setor: {(ticket.contacts as any).sector}
+                  </Badge>
+                </>
+              )}
               <span>•</span>
               {format(new Date(ticket.created_at), "dd/MM/yyyy HH:mm", { locale: ptBR })}
               {(ticket as any).sector && (
