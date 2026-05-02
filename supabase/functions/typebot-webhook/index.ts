@@ -277,13 +277,41 @@ async function handleFlowEvent(
       // ex: 5591993910084, 91993910084, 993910084, 559193910084 (sem 9), etc.
       const variants = buildPhoneVariants(phoneRaw);
       let contact: any = null;
-      const { data: existingContacts } = await supabase
+      // 1) Match exato em qualquer variação
+      const { data: exactMatches } = await supabase
         .from("contacts")
         .select("*")
         .in("phone", variants);
-      if (existingContacts && existingContacts.length > 0) {
-        contact = existingContacts[0];
-      } else {
+      if (exactMatches && exactMatches.length > 0) {
+        contact = exactMatches[0];
+      }
+      // 2) Match parcial: WhatsApp grupo (ex.: 559193910084-1603121921@g.us)
+      //    ou variações com/sem DDI/9. Usa os últimos 8 dígitos do número.
+      if (!contact) {
+        const tail = phoneRaw.slice(-8);
+        if (tail.length === 8) {
+          const { data: partialMatches } = await supabase
+            .from("contacts")
+            .select("*")
+            .like("phone", `%${tail}%`)
+            .order("created_at", { ascending: false });
+          if (partialMatches && partialMatches.length > 0) {
+            // Prioriza contato que JÁ tem ticket aberto/em andamento
+            for (const c of partialMatches) {
+              const { data: t } = await supabase
+                .from("tickets")
+                .select("id")
+                .eq("contact_id", c.id)
+                .in("status", ["open", "in_progress"])
+                .limit(1)
+                .maybeSingle();
+              if (t) { contact = c; break; }
+            }
+            if (!contact) contact = partialMatches[0];
+          }
+        }
+      }
+      if (!contact) {
         const { data: created } = await supabase
           .from("contacts")
           .upsert(
