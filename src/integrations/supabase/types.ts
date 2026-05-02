@@ -89,27 +89,39 @@ export type Database = {
       contacts: {
         Row: {
           created_at: string
+          email: string | null
           id: string
           name: string | null
           phone: string
           profile_pic_url: string | null
+          role_title: string | null
+          sector: string | null
           updated_at: string
+          user_id: string | null
         }
         Insert: {
           created_at?: string
+          email?: string | null
           id?: string
           name?: string | null
           phone: string
           profile_pic_url?: string | null
+          role_title?: string | null
+          sector?: string | null
           updated_at?: string
+          user_id?: string | null
         }
         Update: {
           created_at?: string
+          email?: string | null
           id?: string
           name?: string | null
           phone?: string
           profile_pic_url?: string | null
+          role_title?: string | null
+          sector?: string | null
           updated_at?: string
+          user_id?: string | null
         }
         Relationships: []
       }
@@ -394,6 +406,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      current_user_contact_ids: { Args: never; Returns: string[] }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
