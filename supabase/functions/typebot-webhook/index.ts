@@ -288,13 +288,26 @@ async function handleFlowEvent(
       // 2) Match parcial: WhatsApp grupo (ex.: 559193910084-1603121921@g.us)
       //    ou variações com/sem DDI/9. Usa os últimos 8 dígitos do número.
       if (!contact) {
+        // Extrai os últimos 8 dígitos do telefone do Typebot (ex.: 93910084 de 5591993910084)
         const tail = phoneRaw.slice(-8);
         if (tail.length === 8) {
-          const { data: partialMatches } = await supabase
+          // Busca contatos cujo phone (após remover não-dígitos) contenha esses 8 dígitos
+          // Como contatos do WhatsApp podem estar como "559193910084-1603121921@g.us",
+          // precisamos comparar APENAS a parte numérica antes de qualquer "-" ou "@".
+          const { data: allContacts } = await supabase
             .from("contacts")
             .select("*")
-            .like("phone", `%${tail}%`)
-            .order("created_at", { ascending: false });
+            .order("created_at", { ascending: false })
+            .limit(2000);
+          const partialMatches = (allContacts ?? []).filter((c: any) => {
+            const raw = String(c.phone ?? "");
+            // Pega só o "número" antes de '-' ou '@' (ex.: "559193910084")
+            const numericPart = raw.split(/[-@]/)[0].replace(/\D/g, "");
+            if (!numericPart) return false;
+            // Casa pelos últimos 8 dígitos OU se uma das variantes baterem
+            if (numericPart.endsWith(tail)) return true;
+            return variants.includes(numericPart);
+          });
           if (partialMatches && partialMatches.length > 0) {
             // Prioriza contato que JÁ tem ticket aberto/em andamento
             for (const c of partialMatches) {
