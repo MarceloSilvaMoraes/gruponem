@@ -4,9 +4,11 @@ import { useAuth } from "@/hooks/useAuth";
 export function ProtectedRoute({
   children,
   adminOnly = false,
+  staffOnly = false,
 }: {
   children: JSX.Element;
   adminOnly?: boolean;
+  staffOnly?: boolean;
 }) {
   const { user, role, loading } = useAuth();
   if (loading) {
@@ -18,5 +20,8 @@ export function ProtectedRoute({
   }
   if (!user) return <Navigate to="/auth" replace />;
   if (adminOnly && role !== "admin") return <Navigate to="/" replace />;
+  if (staffOnly && role !== "admin" && role !== "attendant")
+    return <Navigate to="/meus-chamados" replace />;
+  if (role === "end_user") return <Navigate to="/meus-chamados" replace />;
   return children;
 }
