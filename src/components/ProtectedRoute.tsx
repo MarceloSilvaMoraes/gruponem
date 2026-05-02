@@ -5,10 +5,12 @@ export function ProtectedRoute({
   children,
   adminOnly = false,
   staffOnly = false,
+  endUserOnly = false,
 }: {
   children: JSX.Element;
   adminOnly?: boolean;
   staffOnly?: boolean;
+  endUserOnly?: boolean;
 }) {
   const { user, role, loading } = useAuth();
   if (loading) {
@@ -19,6 +21,7 @@ export function ProtectedRoute({
     );
   }
   if (!user) return <Navigate to="/auth" replace />;
+  if (endUserOnly) return children;
   if (adminOnly && role !== "admin") return <Navigate to="/" replace />;
   if (staffOnly && role !== "admin" && role !== "attendant")
     return <Navigate to="/meus-chamados" replace />;
