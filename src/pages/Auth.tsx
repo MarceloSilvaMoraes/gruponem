@@ -46,6 +46,22 @@ export default function Auth() {
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault();
     setSubmitting(true);
+    // If an admin already exists, only allow signup when the e-mail matches a registered contact
+    if (adminExists) {
+      const { data: contact } = await supabase
+        .from("contacts")
+        .select("id")
+        .ilike("email", email.trim())
+        .maybeSingle();
+      if (!contact) {
+        setSubmitting(false);
+        toast.error("E-mail não cadastrado", {
+          description:
+            "Peça ao administrador para cadastrar seu e-mail em Contatos antes de criar sua conta.",
+        });
+        return;
+      }
+    }
     const { error } = await supabase.auth.signUp({
       email,
       password,
@@ -59,7 +75,9 @@ export default function Auth() {
       toast.error("Falha no cadastro", { description: error.message });
     } else {
       toast.success("Conta criada", {
-        description: "Você foi promovido a Administrador. Faça login para continuar.",
+        description: adminExists
+          ? "Faça login para acessar seus chamados."
+          : "Você foi promovido a Administrador. Faça login para continuar.",
       });
       setAdminExists(true);
     }
@@ -78,8 +96,8 @@ export default function Auth() {
           <Tabs defaultValue={adminExists === false ? "signup" : "login"}>
             <TabsList className="grid w-full grid-cols-2 mb-4">
               <TabsTrigger value="login">Entrar</TabsTrigger>
-              <TabsTrigger value="signup" disabled={adminExists === true}>
-                {adminExists === false ? "Criar admin" : "Cadastro"}
+              <TabsTrigger value="signup">
+                {adminExists === false ? "Criar admin" : "Acompanhar meus chamados"}
               </TabsTrigger>
             </TabsList>
 
@@ -105,15 +123,17 @@ export default function Auth() {
             </TabsContent>
 
             <TabsContent value="signup">
-              {adminExists === true ? (
-                <p className="text-sm text-muted-foreground text-center py-6">
-                  Já existe um administrador. Peça a ele para criar sua conta na tela de Equipe.
-                </p>
-              ) : (
-                <form onSubmit={handleSignup} className="space-y-4">
+              <form onSubmit={handleSignup} className="space-y-4">
+                {adminExists ? (
+                  <p className="text-xs text-muted-foreground">
+                    Crie sua conta para acompanhar seus chamados pelo portal. Use o mesmo
+                    e-mail que o administrador cadastrou em Contatos.
+                  </p>
+                ) : (
                   <p className="text-xs text-muted-foreground">
                     Esta é a primeira conta — você será promovido a Administrador automaticamente.
                   </p>
+                )}
                   <div className="space-y-2">
                     <Label htmlFor="name">Nome</Label>
                     <Input id="name" value={displayName}
@@ -131,10 +151,13 @@ export default function Auth() {
                       autoComplete="new-password" />
                   </div>
                   <Button type="submit" className="w-full" disabled={submitting}>
-                    {submitting ? "Criando..." : "Criar conta de admin"}
+                    {submitting
+                      ? "Criando..."
+                      : adminExists
+                        ? "Criar minha conta"
+                        : "Criar conta de admin"}
                   </Button>
-                </form>
-              )}
+              </form>
             </TabsContent>
           </Tabs>
         </CardContent>
