@@ -277,13 +277,23 @@ async function handleFlowEvent(
       // ex: 5591993910084, 91993910084, 993910084, 559193910084 (sem 9), etc.
       const variants = buildPhoneVariants(phoneRaw);
       let contact: any = null;
-      // 1) Match exato em qualquer variação
+      // 1) Match exato em qualquer variação — prioriza contato que já tem ticket
       const { data: exactMatches } = await supabase
         .from("contacts")
         .select("*")
         .in("phone", variants);
       if (exactMatches && exactMatches.length > 0) {
-        contact = exactMatches[0];
+        for (const c of exactMatches) {
+          const { data: t } = await supabase
+            .from("tickets")
+            .select("id")
+            .eq("contact_id", c.id)
+            .order("created_at", { ascending: false })
+            .limit(1)
+            .maybeSingle();
+          if (t) { contact = c; break; }
+        }
+        if (!contact) contact = exactMatches[0];
       }
       // 2) Match parcial: WhatsApp grupo (ex.: 559193910084-1603121921@g.us)
       //    ou variações com/sem DDI/9. Usa os últimos 8 dígitos do número.
