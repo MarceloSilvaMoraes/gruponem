@@ -362,6 +362,23 @@ async function handleFlowEvent(
           .maybeSingle();
         ticket = existing;
 
+        // Para NPS sem ticket existente, cria um ticket "fechado" para registrar a avaliação
+        if (!ticket && event === "nps") {
+          const { data: newTicket } = await supabase
+            .from("tickets")
+            .insert({
+              contact_id: contact.id,
+              subject: "Avaliação NPS",
+              description: "Ticket criado automaticamente para registrar avaliação NPS.",
+              source: "typebot",
+              status: "closed",
+              priority: "low",
+            })
+            .select()
+            .single();
+          ticket = newTicket;
+        }
+
         if (!ticket && event === "flow_started") {
           const { data: newTicket } = await supabase
             .from("tickets")
