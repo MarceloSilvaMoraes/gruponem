@@ -1,0 +1,1 @@
+CREATE POLICY "Admins delete contacts" ON public.contacts FOR DELETE TO authenticated USING (is_admin(auth.uid()));
