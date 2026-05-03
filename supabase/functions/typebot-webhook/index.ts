@@ -337,11 +337,16 @@ async function handleFlowEvent(
       }
       if (contact) {
         contactId = contact.id;
+        // Para NPS, aceitamos qualquer ticket recente (inclusive resolved/closed).
+        // Para os demais eventos, priorizamos open/in_progress.
+        const statusesToMatch = event === "nps"
+          ? ["open", "in_progress", "resolved", "closed"]
+          : ["open", "in_progress"];
         const { data: existing } = await supabase
           .from("tickets")
           .select("*")
           .eq("contact_id", contact.id)
-          .in("status", ["open", "in_progress"])
+          .in("status", statusesToMatch)
           .order("created_at", { ascending: false })
           .limit(1)
           .maybeSingle();
