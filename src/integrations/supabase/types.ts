@@ -247,6 +247,30 @@ export type Database = {
           },
         ]
       }
+      ticket_assignees: {
+        Row: {
+          added_by: string | null
+          created_at: string
+          id: string
+          ticket_id: string
+          user_id: string
+        }
+        Insert: {
+          added_by?: string | null
+          created_at?: string
+          id?: string
+          ticket_id: string
+          user_id: string
+        }
+        Update: {
+          added_by?: string | null
+          created_at?: string
+          id?: string
+          ticket_id?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       ticket_notes: {
         Row: {
           author_id: string
@@ -415,6 +439,10 @@ export type Database = {
         Returns: boolean
       }
       is_admin: { Args: { _user_id: string }; Returns: boolean }
+      is_ticket_co_assignee: {
+        Args: { _ticket_id: string; _user_id: string }
+        Returns: boolean
+      }
     }
     Enums: {
       app_role: "admin" | "attendant" | "end_user"

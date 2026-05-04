@@ -38,6 +38,7 @@ import {
   CommandList,
 } from "@/components/ui/command";
 import { cn } from "@/lib/utils";
+import { AssigneesPicker } from "@/components/AssigneesPicker";
 
 interface Props {
   open: boolean;
@@ -62,6 +63,7 @@ export function NewTicketDialog({ open, onOpenChange }: Props) {
   const [priority, setPriority] = useState<"low" | "medium" | "high" | "urgent">("medium");
   const [category, setCategory] = useState("");
   const [assignToMe, setAssignToMe] = useState(true);
+  const [coAssignees, setCoAssignees] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
 
   const { data: contacts } = useQuery({
@@ -90,6 +92,7 @@ export function NewTicketDialog({ open, onOpenChange }: Props) {
     setPriority("medium");
     setCategory("");
     setAssignToMe(true);
+    setCoAssignees([]);
   };
 
   const submit = async () => {
@@ -116,11 +119,27 @@ export function NewTicketDialog({ open, onOpenChange }: Props) {
       })
       .select("id")
       .single();
-    setSaving(false);
     if (error) {
+      setSaving(false);
       toast.error("Erro ao criar chamado", { description: error.message });
       return;
     }
+
+    if (data?.id && coAssignees.length > 0) {
+      const rows = coAssignees.map((uid) => ({
+        ticket_id: data.id,
+        user_id: uid,
+        added_by: user?.id ?? null,
+      }));
+      const { error: aErr } = await supabase.from("ticket_assignees").insert(rows);
+      if (aErr) {
+        toast.error("Chamado criado, mas falhou ao adicionar co-atendentes", {
+          description: aErr.message,
+        });
+      }
+    }
+
+    setSaving(false);
     toast.success("Chamado criado");
     queryClient.invalidateQueries({ queryKey: ["tickets"] });
     queryClient.invalidateQueries({ queryKey: ["ticket-stats"] });
@@ -251,6 +270,18 @@ export function NewTicketDialog({ open, onOpenChange }: Props) {
             />
             Atribuir a mim
           </label>
+
+          <div className="space-y-2">
+            <Label>Co-atendentes (opcional)</Label>
+            <p className="text-xs text-muted-foreground">
+              Marque outras pessoas do time que vão atender junto com você.
+            </p>
+            <AssigneesPicker
+              value={coAssignees}
+              onChange={setCoAssignees}
+              excludeUserId={assignToMe ? user?.id ?? null : null}
+            />
+          </div>
         </div>
 
         <DialogFooter>
