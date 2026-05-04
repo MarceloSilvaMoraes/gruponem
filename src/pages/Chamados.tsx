@@ -1,8 +1,9 @@
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Search, Trash2, X } from "lucide-react";
+import { Plus, Search, Trash2, X } from "lucide-react";
 import { useTickets } from "@/hooks/useTickets";
 import { TicketCard } from "@/components/TicketCard";
+import { NewTicketDialog } from "@/components/NewTicketDialog";
 import { useAuth } from "@/hooks/useAuth";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -37,6 +38,7 @@ export default function Chamados() {
   const [selectMode, setSelectMode] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [deleting, setDeleting] = useState(false);
+  const [newOpen, setNewOpen] = useState(false);
   const navigate = useNavigate();
   const { user, role } = useAuth();
   const { data: tickets, isLoading } = useTickets(statusFilter);
@@ -97,13 +99,22 @@ export default function Chamados() {
   return (
     <div className="p-4 md:p-6 space-y-5">
       <div>
-        <h1 className="text-2xl md:text-3xl font-display font-bold">Chamados</h1>
-        <p className="text-muted-foreground text-sm mt-1">
-          {role === "admin"
-            ? "Você vê todos os chamados (admin)"
-            : "Você vê seus chamados e os disponíveis para pegar"}
-        </p>
+        <div className="flex items-start justify-between gap-3 flex-wrap">
+          <div>
+            <h1 className="text-2xl md:text-3xl font-display font-bold">Chamados</h1>
+            <p className="text-muted-foreground text-sm mt-1">
+              {role === "admin"
+                ? "Você vê todos os chamados (admin)"
+                : "Você vê seus chamados e os disponíveis para pegar"}
+            </p>
+          </div>
+          <Button onClick={() => setNewOpen(true)}>
+            <Plus className="h-4 w-4" /> Novo chamado
+          </Button>
+        </div>
       </div>
+
+      <NewTicketDialog open={newOpen} onOpenChange={setNewOpen} />
 
       <div className="flex flex-col gap-3">
         <Tabs value={scope} onValueChange={(v) => setScope(v as any)}>
