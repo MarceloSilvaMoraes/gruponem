@@ -45,6 +45,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { toast } from "sonner";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { AssigneesPicker } from "@/components/AssigneesPicker";
 
 const statusOptions = [
   { value: "open", label: "Aberto" },
@@ -62,6 +64,20 @@ export default function TicketDetail() {
   const { data: notes, refetch: refetchNotes } = useTicketNotes(id!);
   const { data: activity } = useTicketActivity(id!);
   const { data: team } = useTeam();
+  const queryClient = useQueryClient();
+
+  const { data: coAssignees, refetch: refetchCoAssignees } = useQuery({
+    queryKey: ["ticket-assignees", id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("ticket_assignees")
+        .select("user_id, added_by, created_at")
+        .eq("ticket_id", id!);
+      if (error) throw error;
+      return data as { user_id: string; added_by: string | null; created_at: string }[];
+    },
+    enabled: !!id,
+  });
 
   const [reply, setReply] = useState("");
   const [note, setNote] = useState("");
@@ -80,6 +96,43 @@ export default function TicketDetail() {
   };
 
   const claim = () => updateField("assigned_to", user!.id);
+
+  const setCoAssignees = async (next: string[]) => {
+    const current = new Set((coAssignees ?? []).map((c) => c.user_id));
+    const target = new Set(next);
+    const toAdd = next.filter((uid) => !current.has(uid));
+    const toRemove = (coAssignees ?? [])
+      .map((c) => c.user_id)
+      .filter((uid) => !target.has(uid));
+
+    if (toAdd.length > 0) {
+      const { error } = await supabase.from("ticket_assignees").insert(
+        toAdd.map((uid) => ({
+          ticket_id: id!,
+          user_id: uid,
+          added_by: user?.id ?? null,
+        })),
+      );
+      if (error) {
+        toast.error("Erro ao adicionar co-atendente", { description: error.message });
+        return;
+      }
+    }
+    if (toRemove.length > 0) {
+      const { error } = await supabase
+        .from("ticket_assignees")
+        .delete()
+        .eq("ticket_id", id!)
+        .in("user_id", toRemove);
+      if (error) {
+        toast.error("Erro ao remover co-atendente", { description: error.message });
+        return;
+      }
+    }
+    refetchCoAssignees();
+    queryClient.invalidateQueries({ queryKey: ["ticket-assignees", id] });
+    toast.success("Co-atendentes atualizados");
+  };
 
   const sendReply = async () => {
     if (!reply.trim()) return;
@@ -132,7 +185,10 @@ export default function TicketDetail() {
   const assignee = team?.find((m) => m.user_id === ticket.assigned_to);
   const isMine = ticket.assigned_to === user?.id;
   const isUnassigned = !ticket.assigned_to;
-  const canManage = role === "admin" || isMine;
+  const coAssigneeIds = (coAssignees ?? []).map((c) => c.user_id);
+  const isCoAssignee = !!user?.id && coAssigneeIds.includes(user.id);
+  const canManage = role === "admin" || isMine || isCoAssignee;
+  const canEditCoAssignees = role === "admin" || isMine;
   const memberName = (uid?: string | null) =>
     team?.find((m) => m.user_id === uid)?.display_name ?? "—";
 
@@ -290,6 +346,34 @@ export default function TicketDetail() {
               </div>
             )}
           </div>
+        </div>
+
+        {/* Co-atendentes */}
+        <div className="bg-card rounded-xl border p-4 mb-4">
+          <div className="flex items-center justify-between mb-2">
+            <label className="text-xs text-muted-foreground">
+              Co-atendentes ({coAssigneeIds.length})
+            </label>
+            {!canEditCoAssignees && coAssigneeIds.length === 0 && (
+              <span className="text-xs text-muted-foreground">Nenhum</span>
+            )}
+          </div>
+          {canEditCoAssignees ? (
+            <AssigneesPicker
+              value={coAssigneeIds}
+              onChange={setCoAssignees}
+              excludeUserId={ticket.assigned_to}
+              placeholder="Adicionar pessoas do time para atender junto..."
+            />
+          ) : coAssigneeIds.length > 0 ? (
+            <div className="flex flex-wrap gap-1.5">
+              {coAssigneeIds.map((uid) => (
+                <Badge key={uid} variant="secondary">
+                  {memberName(uid)}
+                </Badge>
+              ))}
+            </div>
+          ) : null}
         </div>
 
         {/* AI summary */}
