@@ -21,6 +21,8 @@ import Settings from "./pages/Settings.tsx";
 import NotFound from "./pages/NotFound.tsx";
 import Contatos from "./pages/Contatos.tsx";
 import MeusChamados, { MeuChamadoDetalhe } from "./pages/MeusChamados.tsx";
+import Ambientes from "./pages/Ambientes.tsx";
+import Relatorios from "./pages/Relatorios.tsx";
 
 const queryClient = new QueryClient();
 
@@ -61,6 +63,7 @@ const App = () => (
                 <Route path="/chamados" element={<Chamados />} />
                 <Route path="/ticket/:id" element={<TicketDetail />} />
                 <Route path="/computadores" element={<Computadores />} />
+                <Route path="/ambientes" element={<Ambientes />} />
                 <Route
                   path="/cameras"
                   element={
@@ -112,6 +115,7 @@ const App = () => (
                 <Route path="/team" element={<TeamManagement />} />
                 <Route path="/contatos" element={<Contatos />} />
                 <Route path="/metrics" element={<Metrics />} />
+                <Route path="/relatorios" element={<Relatorios />} />
                 <Route path="/triggers" element={<Triggers />} />
                 <Route path="/configuracoes" element={<Settings />} />
               </Route>

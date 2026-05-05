@@ -125,6 +125,92 @@ export type Database = {
         }
         Relationships: []
       }
+      environments: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          id: string
+          location: string | null
+          name: string
+          notes: string | null
+          type: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          location?: string | null
+          name: string
+          notes?: string | null
+          type?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          location?: string | null
+          name?: string
+          notes?: string | null
+          type?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      equipment: {
+        Row: {
+          brand: string | null
+          created_at: string
+          created_by: string | null
+          environment_id: string
+          id: string
+          model: string | null
+          name: string
+          notes: string | null
+          serial_number: string | null
+          status: string
+          type: string
+          updated_at: string
+        }
+        Insert: {
+          brand?: string | null
+          created_at?: string
+          created_by?: string | null
+          environment_id: string
+          id?: string
+          model?: string | null
+          name: string
+          notes?: string | null
+          serial_number?: string | null
+          status?: string
+          type?: string
+          updated_at?: string
+        }
+        Update: {
+          brand?: string | null
+          created_at?: string
+          created_by?: string | null
+          environment_id?: string
+          id?: string
+          model?: string | null
+          name?: string
+          notes?: string | null
+          serial_number?: string | null
+          status?: string
+          type?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "equipment_environment_id_fkey"
+            columns: ["environment_id"]
+            isOneToOne: false
+            referencedRelation: "environments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       messages: {
         Row: {
           contact_id: string | null
