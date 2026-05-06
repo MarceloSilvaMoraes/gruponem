@@ -1,6 +1,16 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { format, startOfDay, endOfDay, startOfWeek, endOfWeek, startOfMonth, endOfMonth, subDays } from "date-fns";
+import {
+  format,
+  startOfDay,
+  endOfDay,
+  startOfWeek,
+  endOfWeek,
+  startOfMonth,
+  endOfMonth,
+  subDays,
+  isSameDay,
+} from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { CalendarIcon, Download } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
@@ -38,6 +48,33 @@ export default function Relatorios() {
     () => getRange(preset, anchor, customFrom, customTo),
     [preset, anchor, customFrom, customTo],
   );
+
+  // Monthly calendar: count tickets per day for the month of `anchor`
+  const monthRange = useMemo(
+    () => ({ from: startOfMonth(anchor), to: endOfMonth(anchor) }),
+    [anchor],
+  );
+  const { data: monthTickets } = useQuery({
+    queryKey: ["calendar-month", monthRange.from.toISOString()],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("tickets")
+        .select("created_at")
+        .gte("created_at", monthRange.from.toISOString())
+        .lte("created_at", monthRange.to.toISOString());
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
+
+  const countsByDay = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const t of monthTickets ?? []) {
+      const k = format(new Date((t as any).created_at), "yyyy-MM-dd");
+      map.set(k, (map.get(k) ?? 0) + 1);
+    }
+    return map;
+  }, [monthTickets]);
 
   const { data: tickets } = useQuery({
     queryKey: ["report-tickets", range.from.toISOString(), range.to.toISOString()],
@@ -188,6 +225,48 @@ export default function Relatorios() {
 
           <p className="text-xs text-muted-foreground">
             Período: {format(range.from, "dd/MM/yyyy HH:mm")} → {format(range.to, "dd/MM/yyyy HH:mm")}
+          </p>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">
+            Calendário — {format(anchor, "MMMM yyyy", { locale: ptBR })}
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <Calendar
+            mode="single"
+            selected={anchor}
+            onSelect={(d) => {
+              if (!d) return;
+              setAnchor(d);
+              setPreset("day");
+            }}
+            month={anchor}
+            onMonthChange={(m) => setAnchor(m)}
+            locale={ptBR}
+            className="p-3 pointer-events-auto"
+            components={{
+              DayContent: (p: any) => {
+                const k = format(p.date, "yyyy-MM-dd");
+                const n = countsByDay.get(k) ?? 0;
+                return (
+                  <div className="relative flex flex-col items-center justify-center w-full h-full">
+                    <span>{p.date.getDate()}</span>
+                    {n > 0 && (
+                      <span className="absolute -bottom-1 text-[9px] font-bold text-primary leading-none">
+                        {n}
+                      </span>
+                    )}
+                  </div>
+                );
+              },
+            }}
+          />
+          <p className="text-xs text-muted-foreground mt-2">
+            Clique em um dia para filtrar o relatório do dia.
           </p>
         </CardContent>
       </Card>
