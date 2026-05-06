@@ -29,6 +29,7 @@ import {
 } from "@/components/ui/sidebar";
 import { useAuth } from "@/hooks/useAuth";
 import { useAppName } from "@/hooks/useAppName";
+import { useMenuVisibility, isItemVisible } from "@/hooks/useMenuVisibility";
 
 const mainItems = [
   { title: "Dashboard", url: "/", icon: LayoutDashboard },
@@ -57,6 +58,7 @@ export function AppSidebar() {
   const { pathname } = useLocation();
   const { role } = useAuth();
   const { data: appName } = useAppName();
+  const { data: visibility } = useMenuVisibility();
 
   const isActive = (url: string) =>
     url === "/" ? pathname === "/" : pathname.startsWith(url);
@@ -90,21 +92,27 @@ export function AppSidebar() {
       <SidebarContent className="px-2">
         <SidebarGroup>
           <SidebarGroupContent>
-            <SidebarMenu>{mainItems.map(renderItem)}</SidebarMenu>
+            <SidebarMenu>
+              {mainItems.filter((i) => isItemVisible(visibility, i.url)).map(renderItem)}
+            </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
 
         {role === "admin" && (
           <SidebarGroup>
             <SidebarGroupContent>
-              <SidebarMenu>{adminItems.map(renderItem)}</SidebarMenu>
+              <SidebarMenu>
+                {adminItems.filter((i) => isItemVisible(visibility, i.url)).map(renderItem)}
+              </SidebarMenu>
             </SidebarGroupContent>
           </SidebarGroup>
         )}
 
         <SidebarGroup>
           <SidebarGroupContent>
-            <SidebarMenu>{aiItems.map(renderItem)}</SidebarMenu>
+            <SidebarMenu>
+              {aiItems.filter((i) => isItemVisible(visibility, i.url)).map(renderItem)}
+            </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>
