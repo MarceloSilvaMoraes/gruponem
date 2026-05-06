@@ -8,7 +8,7 @@ import { ThemeProvider } from "@/hooks/useTheme";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { AppLayout } from "@/components/AppLayout";
 import { PlaceholderPage } from "@/components/PlaceholderPage";
-import { Camera, Package, FileText, MessageSquareText } from "lucide-react";
+import { Camera, Package, MessageSquareText } from "lucide-react";
 import Index from "./pages/Index.tsx";
 import Chamados from "./pages/Chamados.tsx";
 import TicketDetail from "./pages/TicketDetail.tsx";
@@ -23,6 +23,7 @@ import Contatos from "./pages/Contatos.tsx";
 import MeusChamados, { MeuChamadoDetalhe } from "./pages/MeusChamados.tsx";
 import Ambientes from "./pages/Ambientes.tsx";
 import Relatorios from "./pages/Relatorios.tsx";
+import Orcamentos from "./pages/Orcamentos.tsx";
 
 const queryClient = new QueryClient();
 
@@ -64,6 +65,7 @@ const App = () => (
                 <Route path="/ticket/:id" element={<TicketDetail />} />
                 <Route path="/computadores" element={<Computadores />} />
                 <Route path="/ambientes" element={<Ambientes />} />
+                <Route path="/orcamentos" element={<Orcamentos />} />
                 <Route
                   path="/cameras"
                   element={
@@ -81,16 +83,6 @@ const App = () => (
                       title="Estoque"
                       description="Controle de peças, periféricos e suprimentos"
                       icon={Package}
-                    />
-                  }
-                />
-                <Route
-                  path="/orcamentos"
-                  element={
-                    <PlaceholderPage
-                      title="Orçamentos"
-                      description="Solicitações e aprovações de orçamento"
-                      icon={FileText}
                     />
                   }
                 />
