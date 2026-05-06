@@ -82,6 +82,7 @@ export default function TicketDetail() {
   const [reply, setReply] = useState("");
   const [note, setNote] = useState("");
   const [sending, setSending] = useState(false);
+  const [internalOnly, setInternalOnly] = useState(false);
 
   const updateField = async (field: "status" | "priority" | "assigned_to", value: any) => {
     const { error } = await supabase
@@ -137,14 +138,20 @@ export default function TicketDetail() {
   const sendReply = async () => {
     if (!reply.trim()) return;
     setSending(true);
-    const { error } = await supabase.functions.invoke("send-whatsapp-message", {
-      body: { ticket_id: id, content: reply.trim() },
+    const { data, error } = await supabase.functions.invoke("send-whatsapp-message", {
+      body: { ticket_id: id, content: reply.trim(), internal_only: internalOnly },
     });
     setSending(false);
     if (error) {
       toast.error("Falha ao enviar", { description: error.message });
+    } else if (data && (data as any).evoDetail && !(data as any).sentToWhatsapp && !internalOnly) {
+      toast.warning("Salvo no chamado, mas WhatsApp falhou", {
+        description: String((data as any).evoDetail),
+      });
+      setReply("");
+      refetchMessages();
     } else {
-      toast.success("Mensagem enviada");
+      toast.success(internalOnly ? "Resposta salva no chamado" : "Mensagem enviada");
       setReply("");
       refetchMessages();
     }
@@ -419,18 +426,31 @@ export default function TicketDetail() {
             </div>
 
             {canManage ? (
-              <div className="mt-4 border-t pt-4 flex gap-2">
-                <Textarea
-                  placeholder="Responder ao cliente via WhatsApp..."
-                  value={reply}
-                  onChange={(e) => setReply(e.target.value)}
-                  rows={2}
-                  className="resize-none"
-                />
-                <Button onClick={sendReply} disabled={sending || !reply.trim()}>
-                  <Send className="h-4 w-4" />
-                  {sending ? "Enviando..." : "Enviar"}
-                </Button>
+              <div className="mt-4 border-t pt-4 space-y-2">
+                <div className="flex gap-2">
+                  <Textarea
+                    placeholder={internalOnly
+                      ? "Resposta interna (não vai para o WhatsApp)..."
+                      : "Responder ao cliente via WhatsApp..."}
+                    value={reply}
+                    onChange={(e) => setReply(e.target.value)}
+                    rows={2}
+                    className="resize-none"
+                  />
+                  <Button onClick={sendReply} disabled={sending || !reply.trim()}>
+                    <Send className="h-4 w-4" />
+                    {sending ? "Enviando..." : internalOnly ? "Salvar" : "Enviar"}
+                  </Button>
+                </div>
+                <label className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={internalOnly}
+                    onChange={(e) => setInternalOnly(e.target.checked)}
+                    className="h-3.5 w-3.5 accent-primary"
+                  />
+                  Apenas no chamado (não enviar pelo WhatsApp)
+                </label>
               </div>
             ) : (
               <p className="mt-4 border-t pt-4 text-xs text-muted-foreground text-center">

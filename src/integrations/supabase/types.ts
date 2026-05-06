@@ -38,6 +38,80 @@ export type Database = {
         }
         Relationships: []
       }
+      budgets: {
+        Row: {
+          approved_at: string | null
+          approved_by: string | null
+          contact_id: string | null
+          created_at: string
+          estimated_value: number | null
+          id: string
+          item: string
+          justification: string | null
+          metadata: Json | null
+          notes: string | null
+          quantity: number | null
+          requester_email: string | null
+          requester_name: string | null
+          requester_phone: string | null
+          requester_sector: string | null
+          source: string
+          status: string
+          supplier: string | null
+          updated_at: string
+        }
+        Insert: {
+          approved_at?: string | null
+          approved_by?: string | null
+          contact_id?: string | null
+          created_at?: string
+          estimated_value?: number | null
+          id?: string
+          item: string
+          justification?: string | null
+          metadata?: Json | null
+          notes?: string | null
+          quantity?: number | null
+          requester_email?: string | null
+          requester_name?: string | null
+          requester_phone?: string | null
+          requester_sector?: string | null
+          source?: string
+          status?: string
+          supplier?: string | null
+          updated_at?: string
+        }
+        Update: {
+          approved_at?: string | null
+          approved_by?: string | null
+          contact_id?: string | null
+          created_at?: string
+          estimated_value?: number | null
+          id?: string
+          item?: string
+          justification?: string | null
+          metadata?: Json | null
+          notes?: string | null
+          quantity?: number | null
+          requester_email?: string | null
+          requester_name?: string | null
+          requester_phone?: string | null
+          requester_sector?: string | null
+          source?: string
+          status?: string
+          supplier?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "budgets_contact_id_fkey"
+            columns: ["contact_id"]
+            isOneToOne: false
+            referencedRelation: "contacts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       computers: {
         Row: {
           created_at: string
