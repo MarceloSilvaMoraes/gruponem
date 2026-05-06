@@ -82,6 +82,7 @@ export default function TicketDetail() {
   const [reply, setReply] = useState("");
   const [note, setNote] = useState("");
   const [sending, setSending] = useState(false);
+  const [internalOnly, setInternalOnly] = useState(false);
 
   const updateField = async (field: "status" | "priority" | "assigned_to", value: any) => {
     const { error } = await supabase
@@ -137,14 +138,20 @@ export default function TicketDetail() {
   const sendReply = async () => {
     if (!reply.trim()) return;
     setSending(true);
-    const { error } = await supabase.functions.invoke("send-whatsapp-message", {
-      body: { ticket_id: id, content: reply.trim() },
+    const { data, error } = await supabase.functions.invoke("send-whatsapp-message", {
+      body: { ticket_id: id, content: reply.trim(), internal_only: internalOnly },
     });
     setSending(false);
     if (error) {
       toast.error("Falha ao enviar", { description: error.message });
+    } else if (data && (data as any).evoDetail && !(data as any).sentToWhatsapp && !internalOnly) {
+      toast.warning("Salvo no chamado, mas WhatsApp falhou", {
+        description: String((data as any).evoDetail),
+      });
+      setReply("");
+      refetchMessages();
     } else {
-      toast.success("Mensagem enviada");
+      toast.success(internalOnly ? "Resposta salva no chamado" : "Mensagem enviada");
       setReply("");
       refetchMessages();
     }
