@@ -58,13 +58,20 @@ export default function Agenda() {
         const timeMatch = t.subject.match(/(\d{2}[:h]\d{2})|(\d{2}h)/i);
         if (timeMatch) displayTime = timeMatch[0].replace("h", ":00").replace(/:00:00/, ":00");
 
-        // Verifica se o evento já passou (considerando apenas se for hoje)
+        // Verifica os estados temporal do evento (considerando 1h de duração padrão)
         let isPast = false;
+        let isOngoing = false;
+        
         if (isToday(displayDate) && timeMatch) {
           const [hours, minutes] = displayTime.split(":").map(Number);
-          const eventTime = new Date();
-          eventTime.setHours(hours, minutes, 0, 0);
-          isPast = new Date() > eventTime;
+          const startTime = new Date();
+          startTime.setHours(hours, minutes, 0, 0);
+          
+          const endTime = new Date(startTime.getTime() + 60 * 60 * 1000); // +1 hora de duração
+          const now = new Date();
+          
+          isOngoing = now >= startTime && now <= endTime;
+          isPast = now > endTime;
         }
 
         return {
@@ -76,7 +83,8 @@ export default function Agenda() {
           display_time: displayTime,
           description: t.subject,
           status: t.status === "closed" ? "confirmed" : "pending",
-          is_past: isPast
+          is_past: isPast,
+          is_ongoing: isOngoing
         };
       });
     },
@@ -153,12 +161,14 @@ export default function Agenda() {
                 key={booking.id} 
                 className={`flex items-stretch rounded-2xl overflow-hidden border-2 transition-all ${
                   booking.is_past ? "opacity-40 grayscale-[0.5] border-slate-900" : 
+                  booking.is_ongoing ? "border-green-500 bg-green-500/10 shadow-[0_0_30px_rgba(34,197,94,0.3)] animate-pulse" :
                   isTodayEvent ? "border-primary bg-primary/10 shadow-[0_0_20px_rgba(var(--primary),0.2)]" : 
                   "border-slate-800 bg-slate-900/50"
                 }`}
               >
                 <div className={`flex flex-col items-center justify-center min-w-[180px] p-6 ${
                   booking.is_past ? "bg-slate-900 text-slate-500" :
+                  booking.is_ongoing ? "bg-green-500 text-white" :
                   isTodayEvent ? "bg-primary text-white" : "bg-slate-800 text-slate-300"
                 }`}>
                   <span className="text-5xl font-black">{format(new Date(booking.start_time), "dd")}</span>
@@ -169,11 +179,11 @@ export default function Agenda() {
                     <h2 className="text-4xl font-bold capitalize">{booking.environment_name}</h2>
                     <div className="flex items-center gap-8">
                       <div className="flex items-center gap-3 text-2xl text-slate-300">
-                        <Clock className="h-8 w-8 text-primary" />
+                        <Clock className={`h-8 w-8 ${booking.is_ongoing ? "text-white" : "text-primary"}`} />
                         <span className="font-bold">{booking.display_time}</span>
                       </div>
                       <div className="flex items-center gap-3 text-2xl text-slate-300">
-                        <User className="h-8 w-8 text-primary" />
+                        <User className={`h-8 w-8 ${booking.is_ongoing ? "text-white" : "text-primary"}`} />
                         <span>{booking.requester_name}</span>
                       </div>
                     </div>
@@ -181,9 +191,11 @@ export default function Agenda() {
                   <div className="text-right space-y-4">
                     <Badge className={`text-2xl px-6 py-2 rounded-full ${
                       booking.is_past ? "bg-slate-700" :
+                      booking.is_ongoing ? "bg-green-600 animate-bounce" :
                       booking.status === "confirmed" ? "bg-green-500" : "bg-orange-500"
                     }`}>
                       {booking.is_past ? "ENCERRADO" : 
+                       booking.is_ongoing ? "ACONTECENDO AGORA" :
                        booking.status === "confirmed" ? "CONFIRMADO" : "AGUARDANDO"}
                     </Badge>
                   </div>
@@ -235,14 +247,20 @@ export default function Agenda() {
           </Card>
         ) : (
           filteredBookings?.map((booking) => (
-            <Card key={booking.id} className={`overflow-hidden hover:shadow-md transition-all ${booking.is_past ? "opacity-50 grayscale-[0.3]" : ""}`}>
+            <Card key={booking.id} className={`overflow-hidden hover:shadow-md transition-all ${
+              booking.is_past ? "opacity-50 grayscale-[0.3]" : 
+              booking.is_ongoing ? "border-green-500 bg-green-50/50 ring-1 ring-green-200" : ""
+            }`}>
               <CardContent className="p-0">
                 <div className="flex flex-col md:flex-row">
-                  <div className={`p-4 flex flex-col items-center justify-center min-w-[120px] border-r ${booking.is_past ? "bg-slate-100" : "bg-primary/5"}`}>
-                    <span className={`text-2xl font-bold ${booking.is_past ? "text-slate-400" : "text-primary"}`}>
+                  <div className={`p-4 flex flex-col items-center justify-center min-w-[120px] border-r ${
+                    booking.is_past ? "bg-slate-100" : 
+                    booking.is_ongoing ? "bg-green-500 text-white" : "bg-primary/5"
+                  }`}>
+                    <span className={`text-2xl font-bold ${booking.is_past ? "text-slate-400" : booking.is_ongoing ? "text-white" : "text-primary"}`}>
                       {format(new Date(booking.start_time), "dd")}
                     </span>
-                    <span className={`text-xs uppercase font-medium ${booking.is_past ? "text-slate-400" : "text-primary/70"}`}>
+                    <span className={`text-xs uppercase font-medium ${booking.is_past ? "text-slate-400" : booking.is_ongoing ? "text-white/80" : "text-primary/70"}`}>
                       {format(new Date(booking.start_time), "MMM", { locale: ptBR })}
                     </span>
                   </div>
@@ -258,12 +276,18 @@ export default function Agenda() {
                         </div>
                       </div>
                       <div className="flex flex-col items-end gap-2">
-                        <Badge variant={booking.is_past ? "secondary" : booking.status === "confirmed" ? "default" : "secondary"}>
-                          {booking.is_past ? "Encerrado" : booking.status === "confirmed" ? "Confirmado" : "Pendente"}
+                        <Badge variant={
+                          booking.is_past ? "secondary" : 
+                          booking.is_ongoing ? "default" :
+                          booking.status === "confirmed" ? "default" : "secondary"
+                        } className={booking.is_ongoing ? "bg-green-600 hover:bg-green-700" : ""}>
+                          {booking.is_past ? "Encerrado" : 
+                           booking.is_ongoing ? "Acontecendo agora" :
+                           booking.status === "confirmed" ? "Confirmado" : "Pendente"}
                         </Badge>
                         {!booking.is_past && (
                           <div className="flex gap-1">
-                            {booking.status === "pending" && (
+                            {booking.status === "pending" && !booking.is_ongoing && (
                               <Button 
                                 size="sm" 
                                 variant="outline" 
