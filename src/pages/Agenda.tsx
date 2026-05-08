@@ -55,23 +55,41 @@ export default function Agenda() {
         }
 
         // Tenta extrair horário do título: "14:00" ou "14h"
-        const timeMatch = t.subject.match(/(\d{2}[:h]\d{2})|(\d{2}h)/i);
-        if (timeMatch) displayTime = timeMatch[0].replace("h", ":00").replace(/:00:00/, ":00");
+        // Suporta formatos: "14:00 as 16:00", "14h - 16h", "14:00"
+        const timeRangeMatch = t.subject.match(/(\d{2}[:h]\d{2}|\d{2}h)\s*(?:as|às|-|to)\s*(\d{2}[:h]\d{2}|\d{2}h)/i);
+        const singleTimeMatch = t.subject.match(/(\d{2}[:h]\d{2})|(\d{2}h)/i);
+        
+        let startTimeStr = "";
+        let endTimeStr = "";
+        
+        if (timeRangeMatch) {
+          startTimeStr = timeRangeMatch[1].replace("h", ":00");
+          endTimeStr = timeRangeMatch[2].replace("h", ":00");
+          displayTime = `${timeRangeMatch[1]} às ${timeRangeMatch[2]}`;
+        } else if (singleTimeMatch) {
+          startTimeStr = singleTimeMatch[0].replace("h", ":00");
+          displayTime = singleTimeMatch[0];
+        }
 
-        // Verifica os estados temporal do evento (considerando 1h de duração padrão)
+        // Verifica os estados temporal do evento
         let isPast = false;
         let isOngoing = false;
         
-        if (isToday(displayDate) && timeMatch) {
-          const [hours, minutes] = displayTime.split(":").map(Number);
-          const startTime = new Date();
-          startTime.setHours(hours, minutes, 0, 0);
+        if (isToday(displayDate) && startTimeStr) {
+          const [sHours, sMinutes] = startTimeStr.split(":").map(Number);
+          const start = new Date();
+          start.setHours(sHours, sMinutes, 0, 0);
           
-          const endTime = new Date(startTime.getTime() + 60 * 60 * 1000); // +1 hora de duração
+          let end = new Date(start.getTime() + 60 * 60 * 1000); // Default +1h
+          if (endTimeStr) {
+            const [eHours, eMinutes] = endTimeStr.split(":").map(Number);
+            end = new Date();
+            end.setHours(eHours, eMinutes, 0, 0);
+          }
+
           const now = new Date();
-          
-          isOngoing = now >= startTime && now <= endTime;
-          isPast = now > endTime;
+          isOngoing = now >= start && now <= end;
+          isPast = now > end;
         }
 
         return {
