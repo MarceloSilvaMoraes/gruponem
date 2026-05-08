@@ -36,6 +36,7 @@ const mainItems = [
   { title: "Chamados", url: "/chamados", icon: Inbox },
   { title: "Computadores", url: "/computadores", icon: Monitor },
   { title: "Ambientes", url: "/ambientes", icon: MapPin },
+  { title: "Agenda", url: "/agenda", icon: CalendarDays },
   { title: "Câmeras", url: "/cameras", icon: Camera },
   { title: "Estoque", url: "/estoque", icon: Package },
   { title: "Orçamentos", url: "/orcamentos", icon: FileText },

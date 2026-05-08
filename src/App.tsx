@@ -24,6 +24,7 @@ import MeusChamados, { MeuChamadoDetalhe } from "./pages/MeusChamados.tsx";
 import Ambientes from "./pages/Ambientes.tsx";
 import Relatorios from "./pages/Relatorios.tsx";
 import Orcamentos from "./pages/Orcamentos.tsx";
+import Agenda from "./pages/Agenda.tsx";
 
 const queryClient = new QueryClient();
 
@@ -65,6 +66,7 @@ const App = () => (
                 <Route path="/ticket/:id" element={<TicketDetail />} />
                 <Route path="/computadores" element={<Computadores />} />
                 <Route path="/ambientes" element={<Ambientes />} />
+                <Route path="/agenda" element={<Agenda />} />
                 <Route path="/orcamentos" element={<Orcamentos />} />
                 <Route
                   path="/cameras"
