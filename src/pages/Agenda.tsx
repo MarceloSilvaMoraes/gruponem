@@ -45,29 +45,30 @@ export default function Agenda() {
         let displayDate = new Date(t.created_at);
         let displayTime = "Horário não inf.";
         
-        // Tenta extrair data do título: "09/05"
-        const dateMatch = t.subject.match(/(\d{2})\/(\d{2})/);
+        // Tenta extrair data do título: "08/09" ou "8/9"
+        const dateMatch = t.subject.match(/(\d{1,2})\/(\d{1,2})/);
         if (dateMatch) {
           try {
             const currentYear = new Date().getFullYear();
-            displayDate = parse(`${dateMatch[1]}/${dateMatch[2]}/${currentYear}`, "dd/MM/yyyy", new Date());
+            const day = dateMatch[1].padStart(2, '0');
+            const month = dateMatch[2].padStart(2, '0');
+            displayDate = parse(`${day}/${month}/${currentYear}`, "dd/MM/yyyy", new Date());
           } catch (e) {}
         }
 
-        // Tenta extrair horário do título: "14:00" ou "14h"
-        // Suporta formatos: "14:00 as 16:00", "14h - 16h", "14:00"
-        const timeRangeMatch = t.subject.match(/(\d{2}[:h]\d{2}|\d{2}h)\s*(?:as|às|-|to)\s*(\d{2}[:h]\d{2}|\d{2}h)/i);
-        const singleTimeMatch = t.subject.match(/(\d{2}[:h]\d{2})|(\d{2}h)/i);
+        // Tenta extrair horário do título: "8:00 as 12:00", "8h - 12h", "08:00"
+        const timeRangeMatch = t.subject.match(/(\d{1,2}[:h]\d{2}|\d{1,2}h)\s*(?:as|às|-|to)\s*(\d{1,2}[:h]\d{2}|\d{1,2}h)/i);
+        const singleTimeMatch = t.subject.match(/(\d{1,2}[:h]\d{2})|(\d{1,2}h)/i);
         
         let startTimeStr = "";
         let endTimeStr = "";
         
         if (timeRangeMatch) {
-          startTimeStr = timeRangeMatch[1].replace("h", ":00");
-          endTimeStr = timeRangeMatch[2].replace("h", ":00");
+          startTimeStr = timeRangeMatch[1].toLowerCase().replace("h", ":00");
+          endTimeStr = timeRangeMatch[2].toLowerCase().replace("h", ":00");
           displayTime = `${timeRangeMatch[1]} às ${timeRangeMatch[2]}`;
         } else if (singleTimeMatch) {
-          startTimeStr = singleTimeMatch[0].replace("h", ":00");
+          startTimeStr = singleTimeMatch[0].toLowerCase().replace("h", ":00");
           displayTime = singleTimeMatch[0];
         }
 
