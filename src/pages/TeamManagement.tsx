@@ -1,3 +1,4 @@
+import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { ArrowLeft, UserPlus, ShieldCheck, User, Pencil, Trash2 } from "lucide-react";
@@ -38,7 +39,8 @@ import { toast } from "sonner";
 
 export default function TeamManagement() {
   const navigate = useNavigate();
-  const { data: team, refetch } = useTeam();
+  const queryClient = useQueryClient();
+  const { data: team } = useTeam();
   const [open, setOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -67,7 +69,7 @@ export default function TeamManagement() {
       toast.success("Colaborador criado");
       setOpen(false);
       setForm({ display_name: "", email: "", password: "", role: "attendant" });
-      refetch();
+      queryClient.invalidateQueries({ queryKey: ["team"] });
     }
   };
 
@@ -90,7 +92,6 @@ export default function TeamManagement() {
 
     try {
       // 1. Try to Update Profile (Display Name)
-      // This might fail due to RLS if the user is not editing themselves
       const { error: pErr } = await supabase
         .from("profiles")
         .update({ display_name: editForm.display_name })
@@ -118,7 +119,7 @@ export default function TeamManagement() {
       }
       
       setEditOpen(false);
-      refetch();
+      queryClient.invalidateQueries({ queryKey: ["team"] });
     } catch (err: any) {
       toast.error("Erro ao atualizar", { description: err.message });
     } finally {
@@ -128,13 +129,11 @@ export default function TeamManagement() {
 
   const deleteMember = async (userId: string) => {
     try {
-      // Workaround: We only delete the role. 
-      // The useTeam hook will filter out anyone without a role, effectively "deleting" them from the app.
       const { error: rErr } = await supabase.from("user_roles").delete().eq("user_id", userId);
       if (rErr) throw rErr;
 
       toast.success("Colaborador removido");
-      refetch();
+      queryClient.invalidateQueries({ queryKey: ["team"] });
     } catch (err: any) {
       toast.error("Erro ao remover", { description: err.message });
     }
