@@ -115,12 +115,10 @@ export default function TeamManagement() {
 
   const deleteMember = async (userId: string) => {
     try {
-      // We delete the profile and roles. The user remains in Auth but won't be visible.
+      // Workaround: We only delete the role. 
+      // The useTeam hook will filter out anyone without a role, effectively "deleting" them from the app.
       const { error: rErr } = await supabase.from("user_roles").delete().eq("user_id", userId);
       if (rErr) throw rErr;
-
-      const { error: pErr } = await supabase.from("profiles").delete().eq("user_id", userId);
-      if (pErr) throw pErr;
 
       toast.success("Colaborador removido");
       refetch();

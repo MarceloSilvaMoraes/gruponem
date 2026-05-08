@@ -30,12 +30,14 @@ export function useTeam() {
         }
       });
 
-      return profiles.map((p: any) => ({
-        user_id: p.user_id,
-        display_name: p.display_name,
-        email: p.email,
-        role: roleMap.get(p.user_id) ?? "attendant",
-      })) as TeamMember[];
+      return profiles
+        .filter((p: any) => roleMap.has(p.user_id)) // Only show users who have a role
+        .map((p: any) => ({
+          user_id: p.user_id,
+          display_name: p.display_name,
+          email: p.email,
+          role: roleMap.get(p.user_id)!,
+        })) as TeamMember[];
     },
   });
 }
