@@ -25,21 +25,41 @@ export default function Agenda() {
   const [search, setSearch] = useState("");
 
   const { data: bookings, isLoading } = useQuery({
-    queryKey: ["bookings"],
+    queryKey: ["bookings-from-tickets"],
     queryFn: async () => {
+      // Buscamos chamados da categoria 'booking' ou que comecem com [AGENDA]
       const { data, error } = await (supabase as any)
-        .from("bookings")
-        .select("*, environment:environments(name)")
-        .order("start_time", { ascending: true });
+        .from("tickets")
+        .select(`
+          id,
+          subject,
+          category,
+          created_at,
+          status,
+          contact:contacts(name, phone)
+        `)
+        .or("category.eq.booking,subject.ilike.[AGENDA]%")
+        .order("created_at", { ascending: false });
       
       if (error) throw error;
-      return data as Booking[];
+      
+      return data.map((t: any) => ({
+        id: t.id,
+        requester_name: t.contact?.name || "Desconhecido",
+        requester_phone: t.contact?.phone || "",
+        // Tentamos extrair informações do título: "[AGENDA] Sala 01 - 14:00"
+        environment_name: t.subject.replace("[AGENDA]", "").split("-")[0].trim(),
+        start_time: t.created_at, 
+        end_time: t.created_at,
+        description: t.subject,
+        status: t.status === "closed" ? "confirmed" : "pending"
+      }));
     },
   });
 
   const filteredBookings = bookings?.filter(b => 
     b.requester_name.toLowerCase().includes(search.toLowerCase()) ||
-    b.environment?.name.toLowerCase().includes(search.toLowerCase()) ||
+    b.environment_name.toLowerCase().includes(search.toLowerCase()) ||
     b.description?.toLowerCase().includes(search.toLowerCase())
   );
 
@@ -96,7 +116,7 @@ export default function Agenda() {
                         </h3>
                         <div className="flex items-center gap-2 text-sm text-muted-foreground mt-1">
                           <MapPin className="h-3 w-3" />
-                          <span>{booking.environment?.name || "Ambiente removido"}</span>
+                          <span>{booking.environment_name || "Ambiente removido"}</span>
                         </div>
                       </div>
                       <Badge variant={booking.status === "confirmed" ? "default" : "secondary"}>
