@@ -59,13 +59,26 @@ Deno.serve(async (req) => {
       return undefined;
     };
 
-    const item = String(pick("item", "produto", "equipamento") ?? "").trim();
-    if (!item) {
-      return new Response(JSON.stringify({ error: "item é obrigatório" }), {
+    // Accept a free‑text description for the budget request.
+    // Try common keys first, then fall back to any field that contains text.
+    const description = String(
+      pick(
+        "description",
+        "texto",
+        "detalhes",
+        "item",
+        "produto",
+        "equipamento"
+      ) ?? ""
+    ).trim();
+    if (!description) {
+      return new Response(JSON.stringify({ error: "Descrição é obrigatória" }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
+    // Use the description as the item field in the DB (kept for backward compatibility).
+    const item = description;
 
     const phoneRaw = String(pick("phone", "telefone", "whatsapp") ?? "")
       .replace(/\D/g, "");

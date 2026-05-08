@@ -1,0 +1,11 @@
+[[env]]
+name = "EVOLUTION_API_URL"
+value = "http://137.131.185.90:8080/"
+
+[[env]]
+name = "EVOLUTION_API_KEY"
+value = "ssh-key-2026-04-06.key"
+
+[[env]]
+name = "EVOLUTION_INSTANCE"
+value = "49E6F0868104-48F4-B920-E0E1FF7E34BC"
