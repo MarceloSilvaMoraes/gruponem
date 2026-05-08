@@ -101,10 +101,10 @@ export default function TeamManagement() {
 
       // 2. Update Role if changed
       if (editForm.role !== editingMember.role) {
-        await supabase.from("user_roles").delete().eq("user_id", editingMember.user_id);
         const { error: rErr } = await supabase
           .from("user_roles")
-          .insert({ user_id: editingMember.user_id, role: editForm.role });
+          .update({ role: editForm.role })
+          .eq("user_id", editingMember.user_id);
         
         if (rErr) throw rErr;
         roleUpdated = true;
