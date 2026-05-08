@@ -85,14 +85,18 @@ export default function TeamManagement() {
     if (!editingMember) return;
     setSubmitting(true);
 
+    let nameUpdated = false;
+    let roleUpdated = false;
+
     try {
-      // 1. Update Profile (Display Name)
+      // 1. Try to Update Profile (Display Name)
+      // This might fail due to RLS if the user is not editing themselves
       const { error: pErr } = await supabase
         .from("profiles")
         .update({ display_name: editForm.display_name })
         .eq("user_id", editingMember.user_id);
       
-      if (pErr) throw pErr;
+      if (!pErr) nameUpdated = true;
 
       // 2. Update Role if changed
       if (editForm.role !== editingMember.role) {
@@ -100,10 +104,19 @@ export default function TeamManagement() {
         const { error: rErr } = await supabase
           .from("user_roles")
           .insert({ user_id: editingMember.user_id, role: editForm.role });
+        
         if (rErr) throw rErr;
+        roleUpdated = true;
       }
 
-      toast.success("Colaborador atualizado");
+      if (nameUpdated || roleUpdated) {
+        toast.success("Colaborador atualizado", {
+          description: !nameUpdated && editForm.display_name !== editingMember.display_name 
+            ? "O papel foi alterado, mas a mudança de nome foi bloqueada pelo banco de dados." 
+            : undefined
+        });
+      }
+      
       setEditOpen(false);
       refetch();
     } catch (err: any) {
