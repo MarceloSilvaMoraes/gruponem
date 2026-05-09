@@ -73,7 +73,6 @@ function equipIcon(type: string) {
 export default function Ambientes() {
   const { role } = useAuth();
   const canManage = role === "admin" || role === "attendant";
-  const isAdmin = role === "admin"; // Mantemos isAdmin para exclusões críticas se necessário
   const qc = useQueryClient();
   const [envOpen, setEnvOpen] = useState(false);
   const [equipOpen, setEquipOpen] = useState<string | null>(null);
@@ -381,14 +380,16 @@ export default function Ambientes() {
                                 }
                               />
                             </div>
-                            <div className="space-y-2">
-                              <Label>Modelo</Label>
-                              <Input
-                                value={equipForm.model}
-                                onChange={(e) =>
-                                  setEquipForm({ ...equipForm, model: e.target.value })
-                                }
-                              />
+                            <div className="grid grid-cols-2 gap-3">
+                              <div className="space-y-2">
+                                <Label>Modelo</Label>
+                                <Input
+                                  value={equipForm.model}
+                                  onChange={(e) =>
+                                    setEquipForm({ ...equipForm, model: e.target.value })
+                                  }
+                                />
+                              </div>
                             </div>
                           </div>
                           <div className="space-y-2">
