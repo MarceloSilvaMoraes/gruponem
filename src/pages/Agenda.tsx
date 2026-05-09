@@ -3,8 +3,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Calendar as CalendarIcon, Clock, User, MapPin, Search, Monitor, ArrowLeft, Maximize2 } from "lucide-react";
-import { format, parse, isToday } from "date-fns";
+import { Calendar as CalendarIcon, Clock, User, MapPin, Search, Monitor, ArrowLeft } from "lucide-react";
+import { format, parse, isToday, isBefore, startOfDay } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { Input } from "@/components/ui/input";
 import { useState, useEffect } from "react";
@@ -16,7 +16,6 @@ export default function Agenda() {
   const [currentTime, setCurrentTime] = useState(new Date());
   const queryClient = useQueryClient();
 
-  // Relógio Digital
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 1000);
     return () => clearInterval(timer);
@@ -24,7 +23,7 @@ export default function Agenda() {
 
   const { data: bookings, isLoading } = useQuery({
     queryKey: ["bookings-from-tickets"],
-    refetchInterval: 60000, // Auto-atualiza a cada 60 segundos para a TV
+    refetchInterval: 60000,
     queryFn: async () => {
       const { data, error } = await (supabase as any)
         .from("tickets")
@@ -45,7 +44,6 @@ export default function Agenda() {
         let displayDate = new Date(t.created_at);
         let displayTime = "Horário não inf.";
         
-        // Tenta extrair data do título: "08/09" ou "8/9"
         const dateMatch = t.subject.match(/(\d{1,2})\/(\d{1,2})/);
         if (dateMatch) {
           try {
@@ -56,7 +54,6 @@ export default function Agenda() {
           } catch (e) {}
         }
 
-        // Tenta extrair horário do título: "8:00 as 12:00", "8h - 12h", "08:00"
         const timeRangeMatch = t.subject.match(/(\d{1,2}[:h]\d{2}|\d{1,2}h)\s*(?:as|às|-|to)\s*(\d{1,2}[:h]\d{2}|\d{1,2}h)/i);
         const singleTimeMatch = t.subject.match(/(\d{1,2}[:h]\d{2})|(\d{1,2}h)/i);
         
@@ -72,7 +69,6 @@ export default function Agenda() {
           displayTime = singleTimeMatch[0];
         }
 
-        // Verifica os estados temporal do evento
         let isPast = false;
         let isOngoing = false;
         
@@ -81,7 +77,7 @@ export default function Agenda() {
           const start = new Date();
           start.setHours(sHours, sMinutes, 0, 0);
           
-          let end = new Date(start.getTime() + 60 * 60 * 1000); // Default +1h
+          let end = new Date(start.getTime() + 60 * 60 * 1000);
           if (endTimeStr) {
             const [eHours, eMinutes] = endTimeStr.split(":").map(Number);
             end = new Date();
@@ -136,11 +132,18 @@ export default function Agenda() {
     }
   };
 
-  const filteredBookings = bookings?.filter(b => 
-    b.requester_name.toLowerCase().includes(search.toLowerCase()) ||
-    b.environment_name.toLowerCase().includes(search.toLowerCase()) ||
-    b.description?.toLowerCase().includes(search.toLowerCase())
-  );
+  const filteredBookings = bookings?.filter(b => {
+    const eventDate = startOfDay(new Date(b.start_time));
+    const today = startOfDay(new Date());
+    
+    if (isBefore(eventDate, today)) return false;
+    
+    return (
+      b.requester_name.toLowerCase().includes(search.toLowerCase()) ||
+      b.environment_name.toLowerCase().includes(search.toLowerCase()) ||
+      b.description?.toLowerCase().includes(search.toLowerCase())
+    );
+  });
 
   if (tvMode) {
     return (
@@ -261,7 +264,7 @@ export default function Agenda() {
         ) : filteredBookings?.length === 0 ? (
           <Card>
             <CardContent className="py-10 text-center text-muted-foreground">
-              Nenhum agendamento encontrado
+              Nenhum agendamento ativo ou futuro encontrado
             </CardContent>
           </Card>
         ) : (
