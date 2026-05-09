@@ -274,37 +274,42 @@ export default function Agenda() {
                   <span className="text-5xl font-black">{format(new Date(booking.start_time), "dd")}</span>
                   <span className="text-xl uppercase font-bold">{format(new Date(booking.start_time), "MMM", { locale: ptBR })}</span>
                 </div>
-                <div className="p-8 flex-1 flex justify-between items-center">
-                  <div className="space-y-4">
-                    <h2 className="text-4xl font-bold capitalize">{booking.environment_name}</h2>
-                    <div className="flex items-center gap-8">
-                      <div className="flex items-center gap-3 text-2xl text-slate-300">
-                        <Clock className={`h-8 w-8 ${booking.is_ongoing ? "text-white" : "text-primary"}`} />
-                        <span className="font-bold">{booking.display_time}</span>
-                      </div>
-                      <div className="flex items-center gap-3 text-2xl text-slate-300">
-                        <User className={`h-8 w-8 ${booking.is_ongoing ? "text-white" : "text-primary"}`} />
-                        <span>{booking.requester_name}</span>
+                <div className="p-6 md:p-10 flex-1 flex flex-col justify-center gap-4">
+                  <div className="flex justify-between items-start">
+                    <div className="space-y-4">
+                      <h2 className="text-4xl md:text-5xl font-bold capitalize">{booking.environment_name}</h2>
+                      <div className="flex items-center gap-10">
+                        <div className="flex items-center gap-3 text-2xl text-slate-300 font-bold">
+                          <Clock className={`h-8 w-8 ${booking.is_ongoing ? "text-white" : "text-primary"}`} />
+                          <span>{booking.display_time}</span>
+                        </div>
+                        <div className="flex items-center gap-3 text-2xl text-slate-300">
+                          <User className={`h-8 w-8 ${booking.is_ongoing ? "text-white" : "text-primary"}`} />
+                          <span>{booking.requester_name}</span>
+                        </div>
                       </div>
                     </div>
-                    {booking.description && (
-                      <div className="flex items-start gap-2 text-slate-400 italic">
-                        <MessageSquare className="h-5 w-5 mt-1" />
-                        <p className="text-xl line-clamp-2">{booking.description}</p>
-                      </div>
-                    )}
-                  </div>
-                  <div className="text-right space-y-4">
-                    <Badge className={`text-2xl px-6 py-2 rounded-full ${
+                    <Badge className={`text-2xl px-8 py-3 rounded-full ${
                       booking.is_past ? "bg-slate-700" :
                       booking.is_ongoing ? "bg-green-600 animate-bounce" :
-                      booking.status === "confirmed" ? "bg-green-500" : "bg-orange-500"
+                      booking.status === "confirmed" ? "bg-green-500" : "bg-orange-500 shadow-lg shadow-orange-500/20"
                     }`}>
                       {booking.is_past ? "ENCERRADO" : 
                        booking.is_ongoing ? "ACONTECENDO AGORA" :
                        booking.status === "confirmed" ? "CONFIRMADO" : "AGUARDANDO"}
                     </Badge>
                   </div>
+                  
+                  {booking.description && (
+                    <div className={`flex items-start gap-3 p-4 rounded-xl border-l-4 ${
+                      booking.is_ongoing ? "bg-white/10 border-white/40" : "bg-slate-800/50 border-primary/40"
+                    }`}>
+                      <MessageSquare className={`h-6 w-6 mt-1 ${booking.is_ongoing ? "text-white" : "text-primary/70"}`} />
+                      <p className="text-lg md:text-xl text-slate-300 italic line-clamp-2 leading-relaxed">
+                        {booking.description}
+                      </p>
+                    </div>
+                  )}
                 </div>
               </div>
             );
