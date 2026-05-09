@@ -59,6 +59,59 @@ serve(async (req) => {
       return json({ error: "Invalid JSON" }, 400);
     }
 
+    // ========= MODO NOVO: Checagem de Disponibilidade (Agenda) =========
+    if (body.action === "check" || body.event === "check_availability") {
+      const environment_name = body.environment_name || body.sala;
+      const date = body.date || body.data;
+      const start_time = body.start_time || body.inicio;
+      const end_time = body.end_time || body.fim;
+
+      const parseTimeToNumber = (timeStr: string) => {
+        if (!timeStr) return 0;
+        const [h, m] = timeStr.replace('h', ':').split(':').map(Number);
+        return h + (m || 0) / 60;
+      };
+
+      const newStart = parseTimeToNumber(start_time);
+      const newEnd = parseTimeToNumber(end_time || (newStart + 1).toString());
+
+      // Buscar agendamentos existentes
+      const { data: tickets, error } = await supabase
+        .from('tickets')
+        .select('subject')
+        .or(`category.eq.booking,subject.ilike.[AGENDA]%`)
+        .ilike('subject', `%${environment_name}%`)
+        .ilike('subject', `%${date}%`);
+
+      if (error) throw error;
+
+      let conflictFound = false;
+      tickets?.forEach((t: any) => {
+        const rangeMatch = t.subject.match(/(\d{1,2}[:h]\d{2}|\d{1,2}h)\s*(?:as|às|-|to)\s*(\d{1,2}[:h]\d{2}|\d{1,2}h)/i);
+        const singleMatch = t.subject.match(/(\d{1,2}[:h]\d{2})|(\d{1,2}h)/i);
+        let existingStart = 0;
+        let existingEnd = 0;
+
+        if (rangeMatch) {
+          existingStart = parseTimeToNumber(rangeMatch[1]);
+          existingEnd = parseTimeToNumber(rangeMatch[2]);
+        } else if (singleMatch) {
+          existingStart = parseTimeToNumber(singleMatch[0]);
+          existingEnd = existingStart + 1;
+        }
+
+        if (existingStart < newEnd && existingEnd > newStart) {
+          conflictFound = true;
+        }
+      });
+
+      return json({ 
+        available: !conflictFound, 
+        ok: !conflictFound,
+        message: conflictFound ? "Horário ocupado" : "Horário disponível" 
+      });
+    }
+
     // Log the RAW body so we can see exactly what Typebot is sending
     console.log("Typebot RAW body:", JSON.stringify(body));
 
