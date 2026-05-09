@@ -259,10 +259,10 @@ export default function Agenda() {
             return (
               <div 
                 key={booking.id} 
-                className={`flex items-stretch rounded-2xl overflow-hidden border-2 transition-all ${
+                className={`flex items-stretch min-h-[220px] rounded-3xl border-4 transition-all ${
                   booking.is_past ? "opacity-40 grayscale-[0.5] border-slate-900" : 
-                  booking.is_ongoing ? "border-green-500 bg-green-500/10 shadow-[0_0_30px_rgba(34,197,94,0.3)] animate-pulse" :
-                  isTodayEvent ? "border-primary bg-primary/10 shadow-[0_0_20px_rgba(var(--primary),0.2)]" : 
+                  booking.is_ongoing ? "border-green-500 bg-green-500/10 shadow-[0_0_50px_rgba(34,197,94,0.4)] animate-pulse" :
+                  isTodayEvent ? "border-primary bg-primary/10 shadow-[0_0_30px_rgba(var(--primary),0.3)]" : 
                   "border-slate-800 bg-slate-900/50"
                 }`}
               >
@@ -274,10 +274,10 @@ export default function Agenda() {
                   <span className="text-5xl font-black">{format(new Date(booking.start_time), "dd")}</span>
                   <span className="text-xl uppercase font-bold">{format(new Date(booking.start_time), "MMM", { locale: ptBR })}</span>
                 </div>
-                <div className="p-8 md:p-12 flex-1 flex flex-col justify-start gap-6">
-                  <div className="flex justify-between items-start w-full">
+                <div className="p-8 md:p-10 flex-1 flex flex-col justify-start gap-4">
+                  <div className="flex justify-between items-start w-full gap-4">
                     <div className="space-y-4 flex-1">
-                      <h2 className="text-5xl md:text-6xl font-black text-white leading-tight uppercase tracking-tight">
+                      <h2 className="text-4xl md:text-5xl font-black text-white leading-none uppercase tracking-tighter">
                         {booking.environment_name}
                       </h2>
                       <div className="flex flex-wrap items-center gap-12 mt-4">
