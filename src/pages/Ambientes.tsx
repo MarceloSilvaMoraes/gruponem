@@ -72,7 +72,8 @@ function equipIcon(type: string) {
 
 export default function Ambientes() {
   const { role } = useAuth();
-  const isAdmin = role === "admin";
+  const canManage = role === "admin" || role === "attendant";
+  const isAdmin = role === "admin"; // Mantemos isAdmin para exclusões críticas se necessário
   const qc = useQueryClient();
   const [envOpen, setEnvOpen] = useState(false);
   const [equipOpen, setEquipOpen] = useState<string | null>(null);
@@ -164,7 +165,7 @@ export default function Ambientes() {
             Mapeie salas, laboratórios e auditórios e seus equipamentos
           </p>
         </div>
-        {isAdmin && (
+        {canManage && (
           <Dialog open={envOpen} onOpenChange={setEnvOpen}>
             <DialogTrigger asChild>
               <Button>
@@ -281,7 +282,7 @@ export default function Ambientes() {
                         >
                           {item.status}
                         </Badge>
-                        {isAdmin && (
+                        {canManage && (
                           <Button
                             size="icon"
                             variant="ghost"
@@ -300,7 +301,7 @@ export default function Ambientes() {
                   )}
                 </div>
 
-                {isAdmin && (
+                {canManage && (
                   <div className="flex gap-2 pt-2">
                     <Dialog
                       open={equipOpen === env.id}
