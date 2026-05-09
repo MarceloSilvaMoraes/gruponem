@@ -13,8 +13,11 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, Dialog
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { useAuth } from "@/hooks/useAuth";
 
 export default function Agenda() {
+  const { role } = useAuth();
+  const canManage = role === "admin" || role === "attendant";
   const [search, setSearch] = useState("");
   const [tvMode, setTvMode] = useState(false);
   const [currentTime, setCurrentTime] = useState(new Date());
@@ -334,64 +337,66 @@ export default function Agenda() {
           </p>
         </div>
         <div className="flex items-center gap-2 w-full md:w-auto">
-          <Dialog open={isCreateModalOpen} onOpenChange={setIsCreateModalOpen}>
-            <DialogTrigger asChild>
-              <Button className="gap-2">
-                <Plus className="h-4 w-4" /> Nova Reserva
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="sm:max-w-[500px]">
-              <DialogHeader>
-                <DialogTitle>Novo Agendamento Manual</DialogTitle>
-              </DialogHeader>
-              <div className="grid gap-4 py-4">
-                <div className="grid gap-2">
-                  <Label>Ambiente</Label>
-                  <Select onValueChange={(val) => {
-                    const env = environments?.find(e => e.id === val);
-                    setNewBooking(prev => ({ ...prev, environment_id: val, environment_name: env?.name || "" }));
-                  }}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Selecione a sala" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {environments?.map(env => (
-                        <SelectItem key={env.id} value={env.id}>{env.name}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="grid grid-cols-2 gap-4">
+          {canManage && (
+            <Dialog open={isCreateModalOpen} onOpenChange={setIsCreateModalOpen}>
+              <DialogTrigger asChild>
+                <Button className="gap-2">
+                  <Plus className="h-4 w-4" /> Nova Reserva
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="sm:max-w-[500px]">
+                <DialogHeader>
+                  <DialogTitle>Novo Agendamento Manual</DialogTitle>
+                </DialogHeader>
+                <div className="grid gap-4 py-4">
                   <div className="grid gap-2">
-                    <Label>Data</Label>
-                    <Input type="date" value={newBooking.date} onChange={e => setNewBooking(prev => ({ ...prev, date: e.target.value }))} />
+                    <Label>Ambiente</Label>
+                    <Select onValueChange={(val) => {
+                      const env = environments?.find(e => e.id === val);
+                      setNewBooking(prev => ({ ...prev, environment_id: val, environment_name: env?.name || "" }));
+                    }}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Selecione a sala" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {environments?.map(env => (
+                          <SelectItem key={env.id} value={env.id}>{env.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="grid gap-2">
+                      <Label>Data</Label>
+                      <Input type="date" value={newBooking.date} onChange={e => setNewBooking(prev => ({ ...prev, date: e.target.value }))} />
+                    </div>
+                    <div className="grid gap-2">
+                      <Label>Responsável</Label>
+                      <Input placeholder="Nome de quem reservou" value={newBooking.requester_name} onChange={e => setNewBooking(prev => ({ ...prev, requester_name: e.target.value }))} />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="grid gap-2">
+                      <Label>Início</Label>
+                      <Input type="time" value={newBooking.start_time} onChange={e => setNewBooking(prev => ({ ...prev, start_time: e.target.value }))} />
+                    </div>
+                    <div className="grid gap-2">
+                      <Label>Fim (Opcional)</Label>
+                      <Input type="time" value={newBooking.end_time} onChange={e => setNewBooking(prev => ({ ...prev, end_time: e.target.value }))} />
+                    </div>
                   </div>
                   <div className="grid gap-2">
-                    <Label>Responsável</Label>
-                    <Input placeholder="Nome de quem reservou" value={newBooking.requester_name} onChange={e => setNewBooking(prev => ({ ...prev, requester_name: e.target.value }))} />
+                    <Label>Motivo / Descrição</Label>
+                    <Textarea placeholder="Para que será usada a sala?" value={newBooking.reason} onChange={e => setNewBooking(prev => ({ ...prev, reason: e.target.value }))} />
                   </div>
                 </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="grid gap-2">
-                    <Label>Início</Label>
-                    <Input type="time" value={newBooking.start_time} onChange={e => setNewBooking(prev => ({ ...prev, start_time: e.target.value }))} />
-                  </div>
-                  <div className="grid gap-2">
-                    <Label>Fim (Opcional)</Label>
-                    <Input type="time" value={newBooking.end_time} onChange={e => setNewBooking(prev => ({ ...prev, end_time: e.target.value }))} />
-                  </div>
-                </div>
-                <div className="grid gap-2">
-                  <Label>Motivo / Descrição</Label>
-                  <Textarea placeholder="Para que será usada a sala?" value={newBooking.reason} onChange={e => setNewBooking(prev => ({ ...prev, reason: e.target.value }))} />
-                </div>
-              </div>
-              <DialogFooter>
-                <Button variant="outline" onClick={() => setIsCreateModalOpen(false)}>Cancelar</Button>
-                <Button onClick={handleCreateBooking}>Salvar Reserva</Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
+                <DialogFooter>
+                  <Button variant="outline" onClick={() => setIsCreateModalOpen(false)}>Cancelar</Button>
+                  <Button onClick={handleCreateBooking}>Salvar Reserva</Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+          )}
 
           <Button variant="outline" onClick={() => setTvMode(true)} className="gap-2">
             <Monitor className="h-4 w-4" /> Modo TV
@@ -461,9 +466,9 @@ export default function Agenda() {
                         } className={booking.is_ongoing ? "bg-green-600 hover:bg-green-700" : ""}>
                           {booking.is_past ? "Encerrado" : 
                            booking.is_ongoing ? "Acontecendo agora" :
-                           booking.status === "confirmed" ? "Confirmado" : "Pendente"}
+                           booking.status === "confirmed" ? "Confirmed" : "Pending"}
                         </Badge>
-                        {!booking.is_past && (
+                        {!booking.is_past && canManage && (
                           <div className="flex gap-1">
                             {booking.status === "pending" && !booking.is_ongoing && (
                               <Button 

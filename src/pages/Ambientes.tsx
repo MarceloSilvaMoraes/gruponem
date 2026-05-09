@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import {
   Dialog,
@@ -14,6 +14,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
+  DialogFooter,
 } from "@/components/ui/dialog";
 import {
   Select,
@@ -150,6 +151,7 @@ export default function Ambientes() {
   };
 
   const deleteEquip = async (id: string) => {
+    if (!confirm("Excluir este equipamento?")) return;
     const { error } = await (supabase as any).from("equipment").delete().eq("id", id);
     if (error) return toast.error(error.message);
     qc.invalidateQueries({ queryKey: ["equipment"] });
@@ -317,9 +319,9 @@ export default function Ambientes() {
                         </DialogHeader>
                         <form
                           onSubmit={(e) => createEquip(env.id, e)}
-                          className="space-y-3"
+                          className="space-y-4"
                         >
-                          <div className="grid grid-cols-2 gap-3">
+                          <div className="grid grid-cols-2 gap-4">
                             <div className="space-y-2">
                               <Label>Tipo</Label>
                               <Select
@@ -359,8 +361,9 @@ export default function Ambientes() {
                               </Select>
                             </div>
                           </div>
+
                           <div className="space-y-2">
-                            <Label>Nome / identificação</Label>
+                            <Label>Nome / Identificação</Label>
                             <Input
                               required
                               value={equipForm.name}
@@ -370,7 +373,8 @@ export default function Ambientes() {
                               placeholder="Ex: PC-Professor-01"
                             />
                           </div>
-                          <div className="grid grid-cols-2 gap-3">
+
+                          <div className="grid grid-cols-2 gap-4">
                             <div className="space-y-2">
                               <Label>Marca</Label>
                               <Input
@@ -380,30 +384,27 @@ export default function Ambientes() {
                                 }
                               />
                             </div>
-                            <div className="grid grid-cols-2 gap-3">
-                              <div className="space-y-2">
-                                <Label>Modelo</Label>
-                                <Input
-                                  value={equipForm.model}
-                                  onChange={(e) =>
-                                    setEquipForm({ ...equipForm, model: e.target.value })
-                                  }
-                                />
-                              </div>
+                            <div className="space-y-2">
+                              <Label>Modelo</Label>
+                              <Input
+                                value={equipForm.model}
+                                onChange={(e) =>
+                                  setEquipForm({ ...equipForm, model: e.target.value })
+                                }
+                              />
                             </div>
                           </div>
+
                           <div className="space-y-2">
-                            <Label>Nº de série / patrimônio</Label>
+                            <Label>Nº de Série / Patrimônio</Label>
                             <Input
                               value={equipForm.serial_number}
                               onChange={(e) =>
-                                setEquipForm({
-                                  ...equipForm,
-                                  serial_number: e.target.value,
-                                })
+                                setEquipForm({ ...equipForm, serial_number: e.target.value })
                               }
                             />
                           </div>
+
                           <div className="space-y-2">
                             <Label>Observações</Label>
                             <Textarea
@@ -413,8 +414,9 @@ export default function Ambientes() {
                               }
                             />
                           </div>
+
                           <Button type="submit" className="w-full">
-                            Adicionar
+                            Adicionar Equipamento
                           </Button>
                         </form>
                       </DialogContent>
