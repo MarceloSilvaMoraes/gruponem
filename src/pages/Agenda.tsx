@@ -3,23 +3,48 @@ import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Calendar as CalendarIcon, Clock, User, MapPin, Search, Monitor, ArrowLeft } from "lucide-react";
+import { Calendar as CalendarIcon, Clock, User, MapPin, Search, Monitor, ArrowLeft, Plus, MessageSquare } from "lucide-react";
 import { format, parse, isToday, isBefore, startOfDay } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { Input } from "@/components/ui/input";
 import { useState, useEffect } from "react";
 import { toast } from "sonner";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 
 export default function Agenda() {
   const [search, setSearch] = useState("");
   const [tvMode, setTvMode] = useState(false);
   const [currentTime, setCurrentTime] = useState(new Date());
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const queryClient = useQueryClient();
+
+  // Estados para o novo agendamento
+  const [newBooking, setNewBooking] = useState({
+    environment_id: "",
+    environment_name: "",
+    date: format(new Date(), "yyyy-MM-dd"),
+    start_time: "08:00",
+    end_time: "09:00",
+    requester_name: "",
+    reason: ""
+  });
 
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 1000);
     return () => clearInterval(timer);
   }, []);
+
+  const { data: environments } = useQuery({
+    queryKey: ["environments"],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("environments").select("*");
+      if (error) throw error;
+      return data;
+    }
+  });
 
   const { data: bookings, isLoading, error: queryError } = useQuery({
     queryKey: ["bookings-combined"],
@@ -29,36 +54,10 @@ export default function Agenda() {
         const now = new Date();
         const results: any[] = [];
 
-        // 1. Buscar da nova tabela 'bookings' (se existir)
-        const { data: newBookings, error: bErr } = await (supabase as any)
-          .from("bookings")
-          .select(`*, environment:environments(name)`)
-          .order("start_time", { ascending: true });
-
-        if (!bErr && newBookings) {
-          newBookings.forEach((b: any) => {
-            const start = new Date(b.start_time);
-            const end = new Date(b.end_time);
-            results.push({
-              id: b.id,
-              requester_name: b.requester_name,
-              requester_phone: b.requester_phone,
-              environment_name: b.environment?.name || "Ambiente removido",
-              start_time: b.start_time,
-              display_time: `${format(start, "HH:mm")} às ${format(end, "HH:mm")}`,
-              description: b.description,
-              status: b.status,
-              is_past: now > end,
-              is_ongoing: now >= start && now <= end,
-              source: "bookings"
-            });
-          });
-        }
-
-        // 2. Buscar dos tickets antigos (Retrocompatibilidade)
+        // 1. Buscar dos tickets (Onde o Typebot salva)
         const { data: tickets, error: tErr } = await (supabase as any)
           .from("tickets")
-          .select(`id, subject, category, created_at, status, contact:contacts(name, phone)`)
+          .select(`id, subject, description, category, created_at, status, contact:contacts(name, phone)`)
           .or("category.eq.booking,subject.ilike.[AGENDA]%")
           .order("created_at", { ascending: false });
 
@@ -110,7 +109,7 @@ export default function Agenda() {
               environment_name: t.subject.replace("[AGENDA]", "").split("-")[0].trim(),
               start_time: displayDate.toISOString(),
               display_time: displayTime,
-              description: t.subject,
+              description: t.description || t.subject,
               status: t.status === "closed" ? "confirmed" : "pending",
               is_past: isPast,
               is_ongoing: isOngoing,
@@ -127,13 +126,49 @@ export default function Agenda() {
     },
   });
 
-  const confirmBooking = async (booking: any) => {
-    const table = booking.source === "tickets" ? "tickets" : "bookings";
-    const status = booking.source === "tickets" ? "closed" : "confirmed";
-    
+  const handleCreateBooking = async () => {
+    if (!newBooking.environment_name || !newBooking.requester_name) {
+      toast.error("Preencha todos os campos obrigatórios");
+      return;
+    }
+
+    const [year, month, day] = newBooking.date.split("-");
+    const formattedDate = `${day}/${month}`;
+    const subject = `[AGENDA] ${newBooking.environment_name} - ${formattedDate} das ${newBooking.start_time} às ${newBooking.end_time}`;
+
     const { error } = await (supabase as any)
-      .from(table)
-      .update({ status })
+      .from("tickets")
+      .insert({
+        subject,
+        description: newBooking.reason || "Agendamento manual via Dashboard",
+        category: "booking",
+        status: "closed", // Já cria como confirmado
+        priority: "medium",
+        source: "dashboard"
+      });
+
+    if (error) {
+      toast.error("Erro ao criar agendamento");
+    } else {
+      toast.success("Agendamento criado com sucesso!");
+      setIsCreateModalOpen(false);
+      queryClient.invalidateQueries({ queryKey: ["bookings-combined"] });
+      setNewBooking({
+        environment_id: "",
+        environment_name: "",
+        date: format(new Date(), "yyyy-MM-dd"),
+        start_time: "08:00",
+        end_time: "09:00",
+        requester_name: "",
+        reason: ""
+      });
+    }
+  };
+
+  const confirmBooking = async (booking: any) => {
+    const { error } = await (supabase as any)
+      .from("tickets")
+      .update({ status: "closed" })
       .eq("id", booking.id);
     
     if (error) toast.error("Erro ao confirmar");
@@ -145,9 +180,8 @@ export default function Agenda() {
 
   const cancelBooking = async (booking: any) => {
     if (!confirm("Deseja realmente excluir esta reserva?")) return;
-    const table = booking.source === "tickets" ? "tickets" : "bookings";
     const { error } = await (supabase as any)
-      .from(table)
+      .from("tickets")
       .delete()
       .eq("id", booking.id);
     
@@ -161,10 +195,7 @@ export default function Agenda() {
   const filteredBookings = bookings?.filter(b => {
     const eventDate = startOfDay(new Date(b.start_time));
     const today = startOfDay(new Date());
-    
-    // Limpeza automática: Não mostrar dias que já passaram
     if (isBefore(eventDate, today)) return false;
-    
     return (
       b.requester_name.toLowerCase().includes(search.toLowerCase()) ||
       b.environment_name.toLowerCase().includes(search.toLowerCase()) ||
@@ -236,6 +267,12 @@ export default function Agenda() {
                         <span>{booking.requester_name}</span>
                       </div>
                     </div>
+                    {booking.description && (
+                      <div className="flex items-start gap-2 text-slate-400 italic">
+                        <MessageSquare className="h-5 w-5 mt-1" />
+                        <p className="text-xl line-clamp-2">{booking.description}</p>
+                      </div>
+                    )}
                   </div>
                   <div className="text-right space-y-4">
                     <Badge className={`text-2xl px-6 py-2 rounded-full ${
@@ -266,10 +303,69 @@ export default function Agenda() {
             Agenda de Ambientes
           </h1>
           <p className="text-sm text-muted-foreground">
-            Acompanhe as reservas de salas e auditórios feitas pelo WhatsApp
+            Gerencie reservas de salas e auditórios
           </p>
         </div>
         <div className="flex items-center gap-2 w-full md:w-auto">
+          <Dialog open={isCreateModalOpen} onOpenChange={setIsCreateModalOpen}>
+            <DialogTrigger asChild>
+              <Button className="gap-2">
+                <Plus className="h-4 w-4" /> Nova Reserva
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="sm:max-w-[500px]">
+              <DialogHeader>
+                <DialogTitle>Novo Agendamento Manual</DialogTitle>
+              </DialogHeader>
+              <div className="grid gap-4 py-4">
+                <div className="grid gap-2">
+                  <Label>Ambiente</Label>
+                  <Select onValueChange={(val) => {
+                    const env = environments?.find(e => e.id === val);
+                    setNewBooking(prev => ({ ...prev, environment_id: val, environment_name: env?.name || "" }));
+                  }}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecione a sala" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {environments?.map(env => (
+                        <SelectItem key={env.id} value={env.id}>{env.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="grid gap-2">
+                    <Label>Data</Label>
+                    <Input type="date" value={newBooking.date} onChange={e => setNewBooking(prev => ({ ...prev, date: e.target.value }))} />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label>Responsável</Label>
+                    <Input placeholder="Nome de quem reservou" value={newBooking.requester_name} onChange={e => setNewBooking(prev => ({ ...prev, requester_name: e.target.value }))} />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="grid gap-2">
+                    <Label>Início</Label>
+                    <Input type="time" value={newBooking.start_time} onChange={e => setNewBooking(prev => ({ ...prev, start_time: e.target.value }))} />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label>Fim (Opcional)</Label>
+                    <Input type="time" value={newBooking.end_time} onChange={e => setNewBooking(prev => ({ ...prev, end_time: e.target.value }))} />
+                  </div>
+                </div>
+                <div className="grid gap-2">
+                  <Label>Motivo / Descrição</Label>
+                  <Textarea placeholder="Para que será usada a sala?" value={newBooking.reason} onChange={e => setNewBooking(prev => ({ ...prev, reason: e.target.value }))} />
+                </div>
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setIsCreateModalOpen(false)}>Cancelar</Button>
+                <Button onClick={handleCreateBooking}>Salvar Reserva</Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+
           <Button variant="outline" onClick={() => setTvMode(true)} className="gap-2">
             <Monitor className="h-4 w-4" /> Modo TV
           </Button>
@@ -320,13 +416,14 @@ export default function Agenda() {
                   </div>
                   <div className="p-4 flex-1 space-y-3">
                     <div className="flex items-start justify-between gap-2">
-                      <div>
+                      <div className="space-y-1">
                         <h3 className="font-semibold text-lg leading-tight capitalize">
-                          {booking.description.replace("[AGENDA]", "").split("-")[0].trim() || "Sem descrição"}
+                          {booking.environment_name}
                         </h3>
-                        <div className="flex items-center gap-2 text-sm text-muted-foreground mt-1">
-                          <MapPin className="h-3 w-3" />
-                          <span>{booking.environment_name || "Ambiente removido"}</span>
+                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                          <User className="h-3 w-3" />
+                          <span>{booking.requester_name}</span>
+                          <span className="text-xs">({booking.requester_phone || "Dashboard"})</span>
                         </div>
                       </div>
                       <div className="flex flex-col items-end gap-2">
@@ -361,31 +458,20 @@ export default function Agenda() {
                             </Button>
                           </div>
                         )}
-                        {booking.is_past && (
-                          <Button 
-                            size="sm" 
-                            variant="ghost" 
-                            className="h-8 text-xs text-destructive opacity-50 hover:opacity-100"
-                            onClick={() => cancelBooking(booking)}
-                          >
-                            Limpar
-                          </Button>
-                        )}
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-2">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div className="flex items-center gap-2 text-sm">
-                        <Clock className="h-4 w-4 text-muted-foreground" />
-                        <span className="font-bold">
-                          {booking.display_time}
-                        </span>
+                        <Clock className="h-4 w-4 text-primary" />
+                        <span className="font-bold">{booking.display_time}</span>
                       </div>
-                      <div className="flex items-center gap-2 text-sm">
-                        <User className="h-4 w-4 text-muted-foreground" />
-                        <span className="font-medium">{booking.requester_name}</span>
-                        <span className="text-xs text-muted-foreground">({booking.requester_phone})</span>
-                      </div>
+                      {booking.description && (
+                        <div className="flex items-start gap-2 text-sm text-muted-foreground bg-slate-50 p-2 rounded border-l-2 border-primary/30">
+                          <MessageSquare className="h-4 w-4 mt-1 text-primary/50" />
+                          <p className="italic">"{booking.description}"</p>
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>
