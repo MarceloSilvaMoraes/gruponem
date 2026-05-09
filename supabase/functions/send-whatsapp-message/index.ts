@@ -48,28 +48,35 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Load ticket + contact (admin client to bypass RLS for lookup; auth was already validated)
+    // Load ticket + contact
     const { data: ticket, error: tErr } = await admin
       .from("tickets")
-      .select("id, contact_id, assigned_to, contacts(phone)")
+      .select("id, contact_id, assigned_to, contacts(*)")
       .eq("id", ticket_id)
       .maybeSingle();
 
     if (tErr || !ticket) {
+      console.error("Ticket error or not found:", tErr);
       return new Response(JSON.stringify({ error: "Ticket not found" }), {
         status: 404,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    // @ts-ignore
-    const rawPhone: string | undefined = ticket.contacts?.phone;
+    // Handle contacts being an object or an array (Supabase join behavior)
+    const contactData = Array.isArray(ticket.contacts) ? ticket.contacts[0] : ticket.contacts;
+    const rawPhone: string | undefined = contactData?.phone;
+    
+    console.log(`Processing message for ticket ${ticket_id}. Raw phone from DB: "${rawPhone}"`);
+
     let evoDetail: string | null = null;
     let sentToWhatsapp = false;
 
     if (!internal_only) {
-      // Normalize phone: WhatsApp ids may look like "5591999999999-1603121921@g.us"
+      // Normalize phone: WhatsApp ids may look like "5591999999999-1603121921@g.us" or "5591999999999@s.whatsapp.net"
       const numericPart = String(rawPhone ?? "").split(/[-@]/)[0].replace(/\D/g, "");
+      
+      console.log(`Normalized numericPart: "${numericPart}"`);
 
       const evolutionUrl = Deno.env.get("EVOLUTION_API_URL");
       const evolutionKey = Deno.env.get("EVOLUTION_API_KEY");
@@ -77,12 +84,16 @@ Deno.serve(async (req) => {
 
       if (!numericPart) {
         evoDetail = "contato_sem_telefone";
+        console.warn("Aborting WhatsApp send: No numeric phone found.");
       } else if (!evolutionUrl || !evolutionKey || !instance) {
         evoDetail = "evolution_config_ausente";
+        console.error("Aborting WhatsApp send: Missing Evolution API configuration.");
       } else {
         try {
-          const evoRes = await fetch(
-            `${evolutionUrl.replace(/\/$/, "")}/message/sendText/${instance}`,
+          const targetUrl = `${evolutionUrl.replace(/\/$/, "")}/message/sendText/${instance}`;
+          console.log(`Sending to Evolution API: ${targetUrl} (Instance: ${instance})`);
+
+          const evoRes = await fetch(targetUrl,
             {
               method: "POST",
               headers: { "Content-Type": "application/json", apikey: evolutionKey },
@@ -90,13 +101,15 @@ Deno.serve(async (req) => {
             },
           );
           const evoText = await evoText_safe(evoRes);
-          console.log("evolution response", evoRes.status, evoText);
+          console.log("Evolution API response status:", evoRes.status, "Body:", evoText);
+          
           if (!evoRes.ok) {
             evoDetail = `evolution_${evoRes.status}: ${evoText.substring(0, 300)}`;
           } else {
             sentToWhatsapp = true;
           }
         } catch (e) {
+          console.error("Fetch error calling Evolution API:", e);
           evoDetail = `evolution_fetch_error: ${String(e).substring(0, 300)}`;
         }
       }
