@@ -132,24 +132,40 @@ export default function Agenda() {
       return;
     }
 
-    const [year, month, day] = newBooking.date.split("-");
-    const formattedDate = `${day}/${month}`;
-    const subject = `[AGENDA] ${newBooking.environment_name} - ${formattedDate} das ${newBooking.start_time} às ${newBooking.end_time}`;
+    try {
+      // 1. Criar ou Vincular Contato (Necessário para a tabela tickets)
+      const phoneRaw = `dashboard-${newBooking.requester_name.toLowerCase().replace(/\s/g, "-")}`;
+      
+      const { data: contact, error: contactErr } = await supabase
+        .from("contacts")
+        .upsert({ 
+          phone: phoneRaw, 
+          name: newBooking.requester_name 
+        }, { onConflict: "phone" })
+        .select()
+        .single();
 
-    const { error } = await (supabase as any)
-      .from("tickets")
-      .insert({
-        subject,
-        description: newBooking.reason || "Agendamento manual via Dashboard",
-        category: "booking",
-        status: "closed", // Já cria como confirmado
-        priority: "medium",
-        source: "dashboard"
-      });
+      if (contactErr) throw contactErr;
 
-    if (error) {
-      toast.error("Erro ao criar agendamento");
-    } else {
+      // 2. Criar o Ticket de Agendamento
+      const [year, month, day] = newBooking.date.split("-");
+      const formattedDate = `${day}/${month}`;
+      const subject = `[AGENDA] ${newBooking.environment_name} - ${formattedDate} das ${newBooking.start_time} às ${newBooking.end_time}`;
+
+      const { error: ticketErr } = await (supabase as any)
+        .from("tickets")
+        .insert({
+          contact_id: contact.id,
+          subject,
+          description: newBooking.reason || "Agendamento manual via Dashboard",
+          category: "booking",
+          status: "closed",
+          priority: "medium",
+          source: "dashboard"
+        });
+
+      if (ticketErr) throw ticketErr;
+
       toast.success("Agendamento criado com sucesso!");
       setIsCreateModalOpen(false);
       queryClient.invalidateQueries({ queryKey: ["bookings-combined"] });
@@ -162,6 +178,10 @@ export default function Agenda() {
         requester_name: "",
         reason: ""
       });
+
+    } catch (err: any) {
+      console.error("Erro ao criar agendamento:", err);
+      toast.error(`Erro ao criar: ${err.message || "Tente novamente"}`);
     }
   };
 
