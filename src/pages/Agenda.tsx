@@ -274,27 +274,27 @@ export default function Agenda() {
                   <span className="text-5xl font-black">{format(new Date(booking.start_time), "dd")}</span>
                   <span className="text-xl uppercase font-bold">{format(new Date(booking.start_time), "MMM", { locale: ptBR })}</span>
                 </div>
-                <div className="p-8 md:p-10 flex-1 flex flex-col justify-start gap-4">
+                <div className="p-6 md:p-8 flex-1 flex flex-col justify-start gap-4">
                   <div className="flex justify-between items-start w-full gap-4">
-                    <div className="space-y-4 flex-1">
-                      <h2 className="text-4xl md:text-5xl font-black text-white leading-none uppercase tracking-tighter">
+                    <div className="space-y-3 flex-1">
+                      <h2 className="text-3xl md:text-4xl font-black text-white leading-tight uppercase tracking-tight">
                         {booking.environment_name}
                       </h2>
-                      <div className="flex flex-wrap items-center gap-12 mt-4">
-                        <div className="flex items-center gap-4 text-3xl text-slate-100 font-bold">
-                          <Clock className={`h-10 w-10 ${booking.is_ongoing ? "text-white" : "text-primary"}`} />
+                      <div className="flex flex-wrap items-center gap-8 mt-2">
+                        <div className="flex items-center gap-3 text-xl md:text-2xl text-slate-100 font-bold">
+                          <Clock className={`h-7 w-7 ${booking.is_ongoing ? "text-white" : "text-primary"}`} />
                           <span>{booking.display_time}</span>
                         </div>
-                        <div className="flex items-center gap-4 text-3xl text-slate-100 font-medium">
-                          <User className={`h-10 w-10 ${booking.is_ongoing ? "text-white" : "text-primary"}`} />
+                        <div className="flex items-center gap-3 text-xl md:text-2xl text-slate-100 font-medium">
+                          <User className={`h-7 w-7 ${booking.is_ongoing ? "text-white" : "text-primary"}`} />
                           <span>{booking.requester_name}</span>
                         </div>
                       </div>
                     </div>
-                    <Badge className={`text-3xl px-10 py-4 rounded-full font-black shadow-2xl ${
+                    <Badge className={`text-lg md:text-xl px-8 py-3 rounded-full font-black shadow-xl ${
                       booking.is_past ? "bg-slate-700" :
                       booking.is_ongoing ? "bg-green-600 animate-bounce" :
-                      booking.status === "confirmed" ? "bg-green-500" : "bg-orange-500 shadow-orange-500/40"
+                      booking.status === "confirmed" ? "bg-green-500" : "bg-orange-500 shadow-orange-500/30"
                     }`}>
                       {booking.is_past ? "ENCERRADO" : 
                        booking.is_ongoing ? "ACONTECENDO AGORA" :
@@ -303,11 +303,11 @@ export default function Agenda() {
                   </div>
                   
                   {booking.description && (
-                    <div className={`mt-4 flex items-start gap-5 p-6 rounded-2xl border-l-8 ${
-                      booking.is_ongoing ? "bg-white/20 border-white" : "bg-slate-800/80 border-primary"
+                    <div className={`mt-2 flex items-start gap-4 p-5 rounded-xl border-l-6 ${
+                      booking.is_ongoing ? "bg-white/10 border-white" : "bg-slate-800/60 border-primary"
                     }`}>
-                      <MessageSquare className={`h-8 w-8 mt-1 ${booking.is_ongoing ? "text-white" : "text-primary"}`} />
-                      <p className="text-2xl md:text-3xl text-slate-50 font-medium italic leading-relaxed">
+                      <MessageSquare className={`h-6 w-6 mt-1 ${booking.is_ongoing ? "text-white" : "text-primary"}`} />
+                      <p className="text-lg md:text-xl text-slate-100 font-medium italic leading-snug">
                         {booking.description}
                       </p>
                     </div>
