@@ -23,87 +23,36 @@ export default function Agenda() {
   }, []);
 
   const { data: bookings, isLoading } = useQuery({
-    queryKey: ["bookings-from-tickets"],
+    queryKey: ["bookings"],
     refetchInterval: 60000, // Auto-atualiza a cada 60 segundos para a TV
     queryFn: async () => {
       const { data, error } = await (supabase as any)
-        .from("tickets")
+        .from("bookings")
         .select(`
-          id,
-          subject,
-          category,
-          created_at,
-          status,
-          contact:contacts(name, phone)
+          *,
+          environment:environments(name)
         `)
-        .or("category.eq.booking,subject.ilike.[AGENDA]%")
-        .order("created_at", { ascending: false });
+        .order("start_time", { ascending: true });
       
       if (error) throw error;
       
-      return data.map((t: any) => {
-        let displayDate = new Date(t.created_at);
-        let displayTime = "Horário não inf.";
+      const now = new Date();
+      
+      return data.map((b: any) => {
+        const start = new Date(b.start_time);
+        const end = new Date(b.end_time);
         
-        // Tenta extrair data do título: "08/09" ou "8/9"
-        const dateMatch = t.subject.match(/(\d{1,2})\/(\d{1,2})/);
-        if (dateMatch) {
-          try {
-            const currentYear = new Date().getFullYear();
-            const day = dateMatch[1].padStart(2, '0');
-            const month = dateMatch[2].padStart(2, '0');
-            displayDate = parse(`${day}/${month}/${currentYear}`, "dd/MM/yyyy", new Date());
-          } catch (e) {}
-        }
-
-        // Tenta extrair horário do título: "8:00 as 12:00", "8h - 12h", "08:00"
-        const timeRangeMatch = t.subject.match(/(\d{1,2}[:h]\d{2}|\d{1,2}h)\s*(?:as|às|-|to)\s*(\d{1,2}[:h]\d{2}|\d{1,2}h)/i);
-        const singleTimeMatch = t.subject.match(/(\d{1,2}[:h]\d{2})|(\d{1,2}h)/i);
-        
-        let startTimeStr = "";
-        let endTimeStr = "";
-        
-        if (timeRangeMatch) {
-          startTimeStr = timeRangeMatch[1].toLowerCase().replace("h", ":00");
-          endTimeStr = timeRangeMatch[2].toLowerCase().replace("h", ":00");
-          displayTime = `${timeRangeMatch[1]} às ${timeRangeMatch[2]}`;
-        } else if (singleTimeMatch) {
-          startTimeStr = singleTimeMatch[0].toLowerCase().replace("h", ":00");
-          displayTime = singleTimeMatch[0];
-        }
-
-        // Verifica os estados temporal do evento
-        let isPast = false;
-        let isOngoing = false;
-        
-        if (isToday(displayDate) && startTimeStr) {
-          const [sHours, sMinutes] = startTimeStr.split(":").map(Number);
-          const start = new Date();
-          start.setHours(sHours, sMinutes, 0, 0);
-          
-          let end = new Date(start.getTime() + 60 * 60 * 1000); // Default +1h
-          if (endTimeStr) {
-            const [eHours, eMinutes] = endTimeStr.split(":").map(Number);
-            end = new Date();
-            end.setHours(eHours, eMinutes, 0, 0);
-          }
-
-          const now = new Date();
-          isOngoing = now >= start && now <= end;
-          isPast = now > end;
-        }
-
         return {
-          id: t.id,
-          requester_name: t.contact?.name || "Desconhecido",
-          requester_phone: t.contact?.phone || "",
-          environment_name: t.subject.replace("[AGENDA]", "").split("-")[0].trim(),
-          start_time: displayDate.toISOString(), 
-          display_time: displayTime,
-          description: t.subject,
-          status: t.status === "closed" ? "confirmed" : "pending",
-          is_past: isPast,
-          is_ongoing: isOngoing
+          id: b.id,
+          requester_name: b.requester_name,
+          requester_phone: b.requester_phone,
+          environment_name: b.environment?.name || "Ambiente removido",
+          start_time: b.start_time,
+          display_time: `${format(start, "HH:mm")} às ${format(end, "HH:mm")}`,
+          description: b.description,
+          status: b.status,
+          is_past: now > end,
+          is_ongoing: now >= start && now <= end
         };
       });
     },
@@ -111,35 +60,37 @@ export default function Agenda() {
 
   const confirmBooking = async (id: string) => {
     const { error } = await (supabase as any)
-      .from("tickets")
-      .update({ status: "closed" })
+      .from("bookings")
+      .update({ status: "confirmed" })
       .eq("id", id);
     
     if (error) toast.error("Erro ao confirmar");
     else {
       toast.success("Reserva confirmada");
-      queryClient.invalidateQueries({ queryKey: ["bookings-from-tickets"] });
+      queryClient.invalidateQueries({ queryKey: ["bookings"] });
     }
   };
 
   const cancelBooking = async (id: string) => {
     if (!confirm("Deseja realmente excluir esta reserva?")) return;
     const { error } = await (supabase as any)
-      .from("tickets")
+      .from("bookings")
       .delete()
       .eq("id", id);
     
     if (error) toast.error("Erro ao excluir");
     else {
       toast.success("Reserva excluída");
-      queryClient.invalidateQueries({ queryKey: ["bookings-from-tickets"] });
+      queryClient.invalidateQueries({ queryKey: ["bookings"] });
     }
   };
 
   const filteredBookings = bookings?.filter(b => 
-    b.requester_name.toLowerCase().includes(search.toLowerCase()) ||
-    b.environment_name.toLowerCase().includes(search.toLowerCase()) ||
-    b.description?.toLowerCase().includes(search.toLowerCase())
+    !b.is_past && (
+      b.requester_name.toLowerCase().includes(search.toLowerCase()) ||
+      b.environment_name.toLowerCase().includes(search.toLowerCase()) ||
+      b.description?.toLowerCase().includes(search.toLowerCase())
+    )
   );
 
   if (tvMode) {
