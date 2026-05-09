@@ -33,7 +33,6 @@ Deno.serve(async (req) => {
     const pick = (obj: any, ...keys: string[]) => {
       for (const k of keys) {
         if (obj[k]) return obj[k];
-        // Case-insensitive search
         const found = Object.keys(obj).find(ok => ok.toLowerCase() === k.toLowerCase());
         if (found) return obj[found];
       }
@@ -48,25 +47,78 @@ Deno.serve(async (req) => {
     const endTime = pick(body, "end_time", "fim", "hora_fim");
     const description = pick(body, "description", "evento", "motivo");
 
+    if (!envSearch || !date || !startTime) {
+      return new Response(JSON.stringify({ error: "Dados insuficientes (ambiente, data e início são obrigatórios)" }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     // 1. Localizar o ambiente pelo nome
     const { data: env } = await supabase
       .from("environments")
-      .select("id")
+      .select("id, name")
       .ilike("name", `%${envSearch}%`)
       .single();
 
     if (!env) {
-      return new Response(JSON.stringify({ error: "Ambiente não encontrado" }), {
+      return new Response(JSON.stringify({ error: `Ambiente '${envSearch}' não encontrado` }), {
         status: 404,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    // 2. Formatar datas (Exemplo simples, assumindo ISO ou strings compatíveis)
-    const start = new Date(`${date} ${startTime}`);
-    const end = endTime ? new Date(`${date} ${endTime}`) : new Date(start.getTime() + 60 * 60 * 1000); // +1h se não informado
+    // 2. Formatar datas
+    // Tenta lidar com formatos dd/mm/yyyy ou yyyy-mm-dd
+    let formattedDate = date;
+    if (date.includes("/")) {
+      const [d, m, y] = date.split("/");
+      formattedDate = `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
+    }
 
-    // 3. Salvar agendamento
+    const formatTime = (t: string) => {
+      let cleaned = t.toLowerCase().replace("h", ":");
+      if (!cleaned.includes(":")) cleaned += ":00";
+      const [h, m] = cleaned.split(":");
+      return `${h.padStart(2, '0')}:${(m || "00").padStart(2, '0')}`;
+    };
+
+    const startStr = `${formattedDate}T${formatTime(startTime)}`;
+    const start = new Date(startStr);
+    
+    let end = endTime 
+      ? new Date(`${formattedDate}T${formatTime(endTime)}`) 
+      : new Date(start.getTime() + 60 * 60 * 1000);
+
+    if (isNaN(start.getTime()) || isNaN(end.getTime())) {
+      console.error("Invalid Date/Time:", { date, startTime, endTime, startStr });
+      return new Response(JSON.stringify({ error: "Formato de data ou hora inválido. Use AAAA-MM-DD e HH:MM" }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // 3. Verificar sobreposição (Overlap Check)
+    const { data: existing, error: checkError } = await supabase
+      .from("bookings")
+      .select("id")
+      .eq("environment_id", env.id)
+      .neq("status", "cancelled")
+      .filter("start_time", "lt", end.toISOString())
+      .filter("end_time", "gt", start.toISOString());
+
+    if (checkError) throw checkError;
+
+    if (existing && existing.length > 0) {
+      return new Response(JSON.stringify({ 
+        error: `O ambiente ${env.name} já está ocupado neste horário solicitado.` 
+      }), {
+        status: 409,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // 4. Salvar agendamento
     const { data: booking, error } = await supabase
       .from("bookings")
       .insert({
@@ -87,6 +139,7 @@ Deno.serve(async (req) => {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (e) {
+    console.error("Booking Error:", e);
     return new Response(JSON.stringify({ error: e.message }), {
       status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" },

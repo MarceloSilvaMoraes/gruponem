@@ -21,114 +21,140 @@ export default function Agenda() {
     return () => clearInterval(timer);
   }, []);
 
-  const { data: bookings, isLoading } = useQuery({
-    queryKey: ["bookings-from-tickets"],
+  const { data: bookings, isLoading, error: queryError } = useQuery({
+    queryKey: ["bookings-combined"],
     refetchInterval: 60000,
     queryFn: async () => {
-      const { data, error } = await (supabase as any)
-        .from("tickets")
-        .select(`
-          id,
-          subject,
-          category,
-          created_at,
-          status,
-          contact:contacts(name, phone)
-        `)
-        .or("category.eq.booking,subject.ilike.[AGENDA]%")
-        .order("created_at", { ascending: false });
-      
-      if (error) throw error;
-      
-      return data.map((t: any) => {
-        let displayDate = new Date(t.created_at);
-        let displayTime = "Horário não inf.";
-        
-        const dateMatch = t.subject.match(/(\d{1,2})\/(\d{1,2})/);
-        if (dateMatch) {
-          try {
-            const currentYear = new Date().getFullYear();
-            const day = dateMatch[1].padStart(2, '0');
-            const month = dateMatch[2].padStart(2, '0');
-            displayDate = parse(`${day}/${month}/${currentYear}`, "dd/MM/yyyy", new Date());
-          } catch (e) {}
+      try {
+        const now = new Date();
+        const results: any[] = [];
+
+        // 1. Buscar da nova tabela 'bookings' (se existir)
+        const { data: newBookings, error: bErr } = await (supabase as any)
+          .from("bookings")
+          .select(`*, environment:environments(name)`)
+          .order("start_time", { ascending: true });
+
+        if (!bErr && newBookings) {
+          newBookings.forEach((b: any) => {
+            const start = new Date(b.start_time);
+            const end = new Date(b.end_time);
+            results.push({
+              id: b.id,
+              requester_name: b.requester_name,
+              requester_phone: b.requester_phone,
+              environment_name: b.environment?.name || "Ambiente removido",
+              start_time: b.start_time,
+              display_time: `${format(start, "HH:mm")} às ${format(end, "HH:mm")}`,
+              description: b.description,
+              status: b.status,
+              is_past: now > end,
+              is_ongoing: now >= start && now <= end,
+              source: "bookings"
+            });
+          });
         }
 
-        const timeRangeMatch = t.subject.match(/(\d{1,2}[:h]\d{2}|\d{1,2}h)\s*(?:as|às|-|to)\s*(\d{1,2}[:h]\d{2}|\d{1,2}h)/i);
-        const singleTimeMatch = t.subject.match(/(\d{1,2}[:h]\d{2})|(\d{1,2}h)/i);
-        
-        let startTimeStr = "";
-        let endTimeStr = "";
-        
-        if (timeRangeMatch) {
-          startTimeStr = timeRangeMatch[1].toLowerCase().replace("h", ":00");
-          endTimeStr = timeRangeMatch[2].toLowerCase().replace("h", ":00");
-          displayTime = `${timeRangeMatch[1]} às ${timeRangeMatch[2]}`;
-        } else if (singleTimeMatch) {
-          startTimeStr = singleTimeMatch[0].toLowerCase().replace("h", ":00");
-          displayTime = singleTimeMatch[0];
+        // 2. Buscar dos tickets antigos (Retrocompatibilidade)
+        const { data: tickets, error: tErr } = await (supabase as any)
+          .from("tickets")
+          .select(`id, subject, category, created_at, status, contact:contacts(name, phone)`)
+          .or("category.eq.booking,subject.ilike.[AGENDA]%")
+          .order("created_at", { ascending: false });
+
+        if (!tErr && tickets) {
+          tickets.forEach((t: any) => {
+            let displayDate = new Date(t.created_at);
+            let displayTime = "Horário não inf.";
+            const dateMatch = t.subject.match(/(\d{1,2})\/(\d{1,2})/);
+            if (dateMatch) {
+              try {
+                const currentYear = new Date().getFullYear();
+                displayDate = parse(`${dateMatch[1].padStart(2, '0')}/${dateMatch[2].padStart(2, '0')}/${currentYear}`, "dd/MM/yyyy", new Date());
+              } catch (e) {}
+            }
+
+            const timeRangeMatch = t.subject.match(/(\d{1,2}[:h]\d{2}|\d{1,2}h)\s*(?:as|às|-|to)\s*(\d{1,2}[:h]\d{2}|\d{1,2}h)/i);
+            const singleTimeMatch = t.subject.match(/(\d{1,2}[:h]\d{2})|(\d{1,2}h)/i);
+            let startTimeStr = "";
+            let endTimeStr = "";
+            if (timeRangeMatch) {
+              startTimeStr = timeRangeMatch[1].toLowerCase().replace("h", ":00");
+              endTimeStr = timeRangeMatch[2].toLowerCase().replace("h", ":00");
+              displayTime = `${timeRangeMatch[1]} às ${timeRangeMatch[2]}`;
+            } else if (singleTimeMatch) {
+              startTimeStr = singleTimeMatch[0].toLowerCase().replace("h", ":00");
+              displayTime = singleTimeMatch[0];
+            }
+
+            let isPast = false;
+            let isOngoing = false;
+            if (isToday(displayDate) && startTimeStr) {
+              const [sH, sM] = startTimeStr.split(":").map(Number);
+              const start = new Date(); start.setHours(sH, sM, 0, 0);
+              let end = new Date(start.getTime() + 60 * 60 * 1000);
+              if (endTimeStr) {
+                const [eH, eM] = endTimeStr.split(":").map(Number);
+                end = new Date(); end.setHours(eH, eM, 0, 0);
+              }
+              isOngoing = now >= start && now <= end;
+              isPast = now > end;
+            } else if (!isToday(displayDate) && now > displayDate) {
+              isPast = true;
+            }
+
+            results.push({
+              id: t.id,
+              requester_name: t.contact?.name || "Desconhecido",
+              requester_phone: t.contact?.phone || "",
+              environment_name: t.subject.replace("[AGENDA]", "").split("-")[0].trim(),
+              start_time: displayDate.toISOString(),
+              display_time: displayTime,
+              description: t.subject,
+              status: t.status === "closed" ? "confirmed" : "pending",
+              is_past: isPast,
+              is_ongoing: isOngoing,
+              source: "tickets"
+            });
+          });
         }
 
-        let isPast = false;
-        let isOngoing = false;
-        
-        if (isToday(displayDate) && startTimeStr) {
-          const [sHours, sMinutes] = startTimeStr.split(":").map(Number);
-          const start = new Date();
-          start.setHours(sHours, sMinutes, 0, 0);
-          
-          let end = new Date(start.getTime() + 60 * 60 * 1000);
-          if (endTimeStr) {
-            const [eHours, eMinutes] = endTimeStr.split(":").map(Number);
-            end = new Date();
-            end.setHours(eHours, eMinutes, 0, 0);
-          }
-
-          const now = new Date();
-          isOngoing = now >= start && now <= end;
-          isPast = now > end;
-        }
-
-        return {
-          id: t.id,
-          requester_name: t.contact?.name || "Desconhecido",
-          requester_phone: t.contact?.phone || "",
-          environment_name: t.subject.replace("[AGENDA]", "").split("-")[0].trim(),
-          start_time: displayDate.toISOString(), 
-          display_time: displayTime,
-          description: t.subject,
-          status: t.status === "closed" ? "confirmed" : "pending",
-          is_past: isPast,
-          is_ongoing: isOngoing
-        };
-      });
+        return results;
+      } catch (err) {
+        console.error("Erro na Agenda:", err);
+        throw err;
+      }
     },
   });
 
-  const confirmBooking = async (id: string) => {
+  const confirmBooking = async (booking: any) => {
+    const table = booking.source === "tickets" ? "tickets" : "bookings";
+    const status = booking.source === "tickets" ? "closed" : "confirmed";
+    
     const { error } = await (supabase as any)
-      .from("tickets")
-      .update({ status: "closed" })
-      .eq("id", id);
+      .from(table)
+      .update({ status })
+      .eq("id", booking.id);
     
     if (error) toast.error("Erro ao confirmar");
     else {
       toast.success("Reserva confirmada");
-      queryClient.invalidateQueries({ queryKey: ["bookings-from-tickets"] });
+      queryClient.invalidateQueries({ queryKey: ["bookings-combined"] });
     }
   };
 
-  const cancelBooking = async (id: string) => {
+  const cancelBooking = async (booking: any) => {
     if (!confirm("Deseja realmente excluir esta reserva?")) return;
+    const table = booking.source === "tickets" ? "tickets" : "bookings";
     const { error } = await (supabase as any)
-      .from("tickets")
+      .from(table)
       .delete()
-      .eq("id", id);
+      .eq("id", booking.id);
     
     if (error) toast.error("Erro ao excluir");
     else {
       toast.success("Reserva excluída");
-      queryClient.invalidateQueries({ queryKey: ["bookings-from-tickets"] });
+      queryClient.invalidateQueries({ queryKey: ["bookings-combined"] });
     }
   };
 
@@ -136,6 +162,7 @@ export default function Agenda() {
     const eventDate = startOfDay(new Date(b.start_time));
     const today = startOfDay(new Date());
     
+    // Limpeza automática: Não mostrar dias que já passaram
     if (isBefore(eventDate, today)) return false;
     
     return (
@@ -259,7 +286,12 @@ export default function Agenda() {
       </div>
 
       <div className="grid gap-4">
-        {isLoading ? (
+        {queryError ? (
+          <div className="text-center py-10 text-destructive">
+            <p className="font-bold">Erro ao carregar agenda</p>
+            <p className="text-sm">{(queryError as any).message}</p>
+          </div>
+        ) : isLoading ? (
           <p className="text-center py-10 text-muted-foreground">Carregando agenda...</p>
         ) : filteredBookings?.length === 0 ? (
           <Card>
@@ -314,7 +346,7 @@ export default function Agenda() {
                                 size="sm" 
                                 variant="outline" 
                                 className="h-8 text-xs bg-green-50 text-green-700 border-green-200 hover:bg-green-100"
-                                onClick={() => confirmBooking(booking.id)}
+                                onClick={() => confirmBooking(booking)}
                               >
                                 Confirmar
                               </Button>
@@ -323,7 +355,7 @@ export default function Agenda() {
                               size="sm" 
                               variant="outline" 
                               className="h-8 text-xs text-destructive hover:bg-destructive/5"
-                              onClick={() => cancelBooking(booking.id)}
+                              onClick={() => cancelBooking(booking)}
                             >
                               Excluir
                             </Button>
@@ -334,7 +366,7 @@ export default function Agenda() {
                             size="sm" 
                             variant="ghost" 
                             className="h-8 text-xs text-destructive opacity-50 hover:opacity-100"
-                            onClick={() => cancelBooking(booking.id)}
+                            onClick={() => cancelBooking(booking)}
                           >
                             Limpar
                           </Button>
