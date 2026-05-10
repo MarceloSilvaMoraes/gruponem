@@ -162,7 +162,7 @@ export default function TicketDetail() {
           throw new Error("Este contato não possui um número de telefone válido.");
         }
 
-        const typebotWebhookUrl = "https://typebot.co/api/v1/typebots/cmozq1cv9000007kjoz8nm4zk/blocks/i57e0h3cwzoatl28v8156ewo/web/executeTestWebhook";
+        const typebotWebhookUrl = "https://typebot.co/api/v1/typebots/cmozq1cv9000007kjoz8nm4zk/blocks/i57e0h3cwzoatl28v8156ewo/results/dashboard/executeWebhook";
         
         console.log(`Sending message via Typebot Proxy: ${typebotWebhookUrl}`);
 
