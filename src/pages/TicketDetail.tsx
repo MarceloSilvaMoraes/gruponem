@@ -154,7 +154,7 @@ export default function TicketDetail() {
         
         toast.success("Resposta interna salva");
       } else {
-        // DIRECT BYPASS WITH CORS PROXY: Call Evolution API from browser via corsproxy.io
+        // TYPEBOT PROXY: Use Typebot as a bridge to reach the HTTP Evolution API
         const phoneRaw = ticket.contacts?.phone;
         const numericPart = String(phoneRaw ?? "").split(/[-@]/)[0].replace(/\D/g, "");
         
@@ -162,28 +162,24 @@ export default function TicketDetail() {
           throw new Error("Este contato não possui um número de telefone válido.");
         }
 
-        const realEvolutionUrl = "http://137.131.185.90:8080";
-        // We use corsproxy.io to bypass Mixed Content (HTTPS -> HTTP) and CORS
-        const evolutionUrl = `https://corsproxy.io/?${encodeURIComponent(realEvolutionUrl)}`;
-        const evolutionKey = "ssh-key-2026-04-06.key";
-        const instance = "49E6F0868104-48F4-B920-E0E1FF7E34BC";
+        const typebotWebhookUrl = "https://typebot.co/api/v1/typebots/cmozq1cv9000007kjoz8nm4zk/blocks/i57e0h3cwzoatl28v8156ewo/web/executeTestWebhook";
+        
+        console.log(`Sending message via Typebot Proxy: ${typebotWebhookUrl}`);
 
-        const targetUrl = `${evolutionUrl}/message/sendText/${instance}`;
-        console.log(`Sending message via proxy: ${targetUrl}`);
-
-        const evoRes = await fetch(targetUrl, {
+        const typebotRes = await fetch(typebotWebhookUrl, {
           method: "POST",
           headers: { 
-            "Content-Type": "application/json", 
-            "apikey": evolutionKey 
+            "Content-Type": "application/json"
           },
-          body: JSON.stringify({ number: numericPart, text: reply.trim() }),
+          body: JSON.stringify({ 
+            number: numericPart, 
+            text: reply.trim() 
+          }),
         });
 
-        const evoData = await evoRes.json().catch(() => ({}));
-        
-        if (!evoRes.ok) {
-          throw new Error(`Erro na Evolution API: ${evoRes.status}`);
+        if (!typebotRes.ok) {
+          const errText = await typebotRes.text();
+          throw new Error(`Erro no Typebot Proxy: ${typebotRes.status} - ${errText}`);
         }
 
         // Save to DB as outbound message
