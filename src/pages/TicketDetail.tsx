@@ -136,24 +136,77 @@ export default function TicketDetail() {
   };
 
   const sendReply = async () => {
-    if (!reply.trim()) return;
+    if (!reply.trim() || !id) return;
     setSending(true);
-    const { data, error } = await supabase.functions.invoke("send-whatsapp-message", {
-      body: { ticket_id: id, content: reply.trim(), internal_only: internalOnly },
-    });
-    setSending(false);
-    if (error) {
-      toast.error("Falha ao enviar", { description: error.message });
-    } else if (data && (data as any).evoDetail && !(data as any).sentToWhatsapp && !internalOnly) {
-      toast.warning("Salvo no chamado, mas WhatsApp falhou", {
-        description: String((data as any).evoDetail),
-      });
+
+    try {
+      if (internalOnly) {
+        // Just save to DB
+        const { error: msgErr } = await supabase.from("messages").insert({
+          ticket_id: id,
+          contact_id: ticket.contact_id,
+          direction: "outbound",
+          content: reply.trim(),
+          message_type: "text",
+          sender_label: "internal",
+        });
+        if (msgErr) throw msgErr;
+        
+        toast.success("Resposta interna salva");
+      } else {
+        // DIRECT BYPASS: Call Evolution API from browser
+        const phoneRaw = ticket.contacts?.phone;
+        const numericPart = String(phoneRaw ?? "").split(/[-@]/)[0].replace(/\D/g, "");
+        
+        if (!numericPart) {
+          throw new Error("Este contato não possui um número de telefone válido.");
+        }
+
+        const evolutionUrl = "http://137.131.185.90:8080";
+        const evolutionKey = "ssh-key-2026-04-06.key";
+        const instance = "49E6F0868104-48F4-B920-E0E1FF7E34BC";
+
+        const evoRes = await fetch(`${evolutionUrl}/message/sendText/${instance}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", apikey: evolutionKey },
+          body: JSON.stringify({ number: numericPart, text: reply.trim() }),
+        });
+
+        const evoData = await evoRes.json().catch(() => ({}));
+        
+        if (!evoRes.ok) {
+          throw new Error(`Erro na Evolution API: ${evoRes.status}`);
+        }
+
+        // Save to DB as outbound message
+        const { error: msgErr } = await supabase.from("messages").insert({
+          ticket_id: id,
+          contact_id: ticket.contact_id,
+          direction: "outbound",
+          content: reply.trim(),
+          message_type: "text",
+          sender_label: "agent",
+        });
+        if (msgErr) throw msgErr;
+
+        // Log activity
+        await supabase.from("ticket_activity").insert({
+          ticket_id: id,
+          actor_id: user?.id,
+          action: "message_sent",
+          to_value: reply.trim().substring(0, 200),
+        });
+
+        toast.success("Mensagem enviada pelo WhatsApp");
+      }
+
       setReply("");
       refetchMessages();
-    } else {
-      toast.success(internalOnly ? "Resposta salva no chamado" : "Mensagem enviada");
-      setReply("");
-      refetchMessages();
+    } catch (err: any) {
+      console.error("Error sending message:", err);
+      toast.error("Falha ao enviar", { description: err.message });
+    } finally {
+      setSending(false);
     }
   };
 
