@@ -214,15 +214,15 @@ export default function TicketDetail() {
             <h1 className="text-xl font-bold truncate">
               {ticket.subject || "Sem assunto"}
             </h1>
-            <p className="text-sm text-muted-foreground flex items-center gap-2 flex-wrap">
-              <Phone className="h-3 w-3" />
-              {ticket.contacts?.name || ticket.contacts?.phone}
-              {(ticket.contacts as any)?.email && (
-                <>
-                  <span>•</span>
-                  <span>{(ticket.contacts as any).email}</span>
-                </>
-              )}
+            <p className="text-sm text-muted-foreground flex items-center gap-3 flex-wrap">
+              <span className="flex items-center gap-1.5 bg-secondary/50 px-2 py-0.5 rounded-md text-foreground font-medium">
+                <User className="h-3.5 w-3.5 text-primary" />
+                {ticket.contacts?.name || "Sem nome"}
+              </span>
+              <span className="flex items-center gap-1.5">
+                <Phone className="h-3.5 w-3.5" />
+                {ticket.contacts?.phone}
+              </span>
               {(ticket.contacts as any)?.role_title && (
                 <>
                   <span>•</span>

@@ -174,9 +174,9 @@ serve(async (req) => {
 
     const name = nameInput ? String(nameInput).trim() : null;
     const sector = sectorInput ? String(sectorInput).trim().slice(0, 80) : null;
-    // phone é opcional. Se não vier, geramos um identificador sintético
-    // para manter o contato único (não dá para agrupar histórico sem telefone).
-    let phoneRaw = String(body.phone ?? "").replace(/\D/g, "");
+    const phoneInput = pick("phone", "remoteJid", "whatsapp", "telefone", "userPhone");
+    let phoneRaw = String(phoneInput ?? "").split(/[-@]/)[0].replace(/\D/g, "");
+    
     if (!phoneRaw) {
       const slug = (name ?? "anon")
         .toLowerCase()
@@ -315,7 +315,9 @@ async function handleFlowEvent(
   }
 
   if (!ticket) {
-    let phoneRaw = String(phoneInput ?? "").replace(/\D/g, "");
+    const phoneInput = pick("phone", "remoteJid", "whatsapp", "telefone", "userPhone");
+    let phoneRaw = String(phoneInput ?? "").split(/[-@]/)[0].replace(/\D/g, "");
+    
     if (!phoneRaw && nameInput) {
       const slug = String(nameInput)
         .toLowerCase()
