@@ -214,40 +214,35 @@ export default function TicketDetail() {
             <h1 className="text-xl font-bold truncate">
               {ticket.subject || "Sem assunto"}
             </h1>
-            <p className="text-sm text-muted-foreground flex items-center gap-3 flex-wrap">
-              <span className="flex items-center gap-1.5 bg-secondary/50 px-2 py-0.5 rounded-md text-foreground font-medium">
-                <User className="h-3.5 w-3.5 text-primary" />
-                {ticket.contacts?.name || "Sem nome"}
-              </span>
-              <span className="flex items-center gap-1.5">
-                <Phone className="h-3.5 w-3.5" />
-                {ticket.contacts?.phone}
-              </span>
-              {(ticket.contacts as any)?.role_title && (
-                <>
-                  <span>•</span>
-                  <span>{(ticket.contacts as any).role_title}</span>
-                </>
+            <div className="flex items-center gap-4 text-sm text-muted-foreground flex-wrap">
+              {ticket.contacts?.name && (
+                <div className="flex items-center gap-1.5 bg-muted/50 px-2.5 py-1 rounded-md border border-muted-foreground/10">
+                  <User className="h-3.5 w-3.5 text-primary/70" />
+                  <span className="font-medium text-foreground">{ticket.contacts.name}</span>
+                </div>
               )}
-              {(ticket.contacts as any)?.sector && !((ticket as any).sector) && (
-                <>
-                  <span>•</span>
-                  <Badge className="bg-primary/15 text-primary hover:bg-primary/15">
-                    Setor: {(ticket.contacts as any).sector}
-                  </Badge>
-                </>
+              
+              {ticket.contacts?.phone && (
+                <div className="flex items-center gap-1.5 bg-muted/50 px-2.5 py-1 rounded-md border border-muted-foreground/10">
+                  <Phone className="h-3.5 w-3.5 text-primary/70" />
+                  <span className="font-medium text-foreground">{ticket.contacts.phone}</span>
+                </div>
               )}
-              <span>•</span>
-              {format(new Date(ticket.created_at), "dd/MM/yyyy HH:mm", { locale: ptBR })}
+
+              <div className="flex items-center gap-1.5">
+                <span>•</span>
+                <span>{format(new Date(ticket.created_at), "dd/MM/yyyy HH:mm", { locale: ptBR })}</span>
+              </div>
+              
               {(ticket as any).sector && (
                 <>
                   <span>•</span>
-                  <Badge className="bg-primary/15 text-primary hover:bg-primary/15">
+                  <Badge className="bg-primary/15 text-primary hover:bg-primary/15 border-none">
                     Setor: {(ticket as any).sector}
                   </Badge>
                 </>
               )}
-            </p>
+            </div>
           </div>
           {role === "admin" && (
             <AlertDialog>
