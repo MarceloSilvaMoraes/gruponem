@@ -154,7 +154,7 @@ export default function TicketDetail() {
         
         toast.success("Resposta interna salva");
       } else {
-        // DIRECT BYPASS: Call Evolution API from browser
+        // DIRECT BYPASS WITH CORS PROXY: Call Evolution API from browser via corsproxy.io
         const phoneRaw = ticket.contacts?.phone;
         const numericPart = String(phoneRaw ?? "").split(/[-@]/)[0].replace(/\D/g, "");
         
@@ -162,13 +162,21 @@ export default function TicketDetail() {
           throw new Error("Este contato não possui um número de telefone válido.");
         }
 
-        const evolutionUrl = "http://137.131.185.90:8080";
+        const realEvolutionUrl = "http://137.131.185.90:8080";
+        // We use corsproxy.io to bypass Mixed Content (HTTPS -> HTTP) and CORS
+        const evolutionUrl = `https://corsproxy.io/?${encodeURIComponent(realEvolutionUrl)}`;
         const evolutionKey = "ssh-key-2026-04-06.key";
         const instance = "49E6F0868104-48F4-B920-E0E1FF7E34BC";
 
-        const evoRes = await fetch(`${evolutionUrl}/message/sendText/${instance}`, {
+        const targetUrl = `${evolutionUrl}/message/sendText/${instance}`;
+        console.log(`Sending message via proxy: ${targetUrl}`);
+
+        const evoRes = await fetch(targetUrl, {
           method: "POST",
-          headers: { "Content-Type": "application/json", apikey: evolutionKey },
+          headers: { 
+            "Content-Type": "application/json", 
+            "apikey": evolutionKey 
+          },
           body: JSON.stringify({ number: numericPart, text: reply.trim() }),
         });
 
