@@ -154,7 +154,7 @@ export default function TicketDetail() {
         
         toast.success("Resposta interna salva");
       } else {
-        // TYPEBOT PROXY: Use Typebot as a bridge to reach the HTTP Evolution API
+        // TYPEBOT CHAT API BYPASS: Use the chat start API to trigger the flow without 401 errors
         const phoneRaw = ticket.contacts?.phone;
         const numericPart = String(phoneRaw ?? "").split(/[-@]/)[0].replace(/\D/g, "");
         
@@ -162,24 +162,27 @@ export default function TicketDetail() {
           throw new Error("Este contato não possui um número de telefone válido.");
         }
 
-        const typebotWebhookUrl = "https://typebot.co/api/v1/typebots/cmozq1cv9000007kjoz8nm4zk/blocks/i57e0h3cwzoatl28v8156ewo/results/dashboard/executeWebhook";
+        const typebotId = "cmozq1cv9000007kjoz8nm4zk";
+        const typebotUrl = `https://typebot.co/api/v1/typebots/${typebotId}/startChat`;
         
-        console.log(`Sending message via Typebot Proxy: ${typebotWebhookUrl}`);
+        console.log(`Sending message via Typebot Chat API: ${typebotUrl}`);
 
-        const typebotRes = await fetch(typebotWebhookUrl, {
+        const typebotRes = await fetch(typebotUrl, {
           method: "POST",
           headers: { 
             "Content-Type": "application/json"
           },
           body: JSON.stringify({ 
-            number: numericPart, 
-            text: reply.trim() 
+            prefilledVariables: {
+              number: numericPart,
+              text: reply.trim()
+            }
           }),
         });
 
         if (!typebotRes.ok) {
           const errText = await typebotRes.text();
-          throw new Error(`Erro no Typebot Proxy: ${typebotRes.status} - ${errText}`);
+          throw new Error(`Erro no Typebot: ${typebotRes.status} - ${errText}`);
         }
 
         // Save to DB as outbound message
