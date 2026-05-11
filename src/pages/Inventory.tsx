@@ -62,6 +62,7 @@ const Inventory = () => {
   const [isItemModalOpen, setIsItemModalOpen] = useState(false);
   const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<any>(null);
+  const [stockItem, setStockItem] = useState<any>(null);
 
   // Queries para buscar dados reais do banco
   const { data: units = [] } = useQuery({
@@ -148,6 +149,23 @@ const Inventory = () => {
       setEditingItem(null);
     },
     onError: (error) => toast.error(`Erro ao atualizar: ${error.message}`)
+  });
+
+  const updateStockMutation = useMutation({
+    mutationFn: async ({ item_id, sector_id, quantity }: { item_id: string, sector_id: string, quantity: number }) => {
+      const { data, error } = await supabase
+        .from("stock_levels")
+        .upsert({ item_id, sector_id, quantity }, { onConflict: "item_id,sector_id" })
+        .select();
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["stock_levels"] });
+      toast.success("Saldo atualizado com sucesso!");
+      setStockItem(null);
+    },
+    onError: (error) => toast.error(`Erro ao atualizar saldo: ${error.message}`)
   });
 
   const addTransferMutation = useMutation({
@@ -794,6 +812,7 @@ const Inventory = () => {
                         </TableCell>
                         <TableCell className="text-right">
                           <Button variant="ghost" size="sm" onClick={() => setEditingItem(item)}>Editar</Button>
+                          <Button variant="ghost" size="sm" className="text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 ml-1" onClick={() => setStockItem(item)}>+ Saldo</Button>
                         </TableCell>
                       </TableRow>
                     )})}
@@ -1015,6 +1034,58 @@ const Inventory = () => {
                 <Button type="submit" disabled={updateItemMutation.isPending}>
                   {updateItemMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                   Salvar Alterações
+                </Button>
+              </DialogFooter>
+            </form>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!stockItem} onOpenChange={(open) => !open && setStockItem(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Lançar Saldo de Estoque</DialogTitle>
+            <DialogDescription>Ajuste a quantidade atual deste material em um setor específico.</DialogDescription>
+          </DialogHeader>
+          {stockItem && (
+            <form onSubmit={(e) => {
+              e.preventDefault();
+              const formData = new FormData(e.currentTarget);
+              updateStockMutation.mutate({
+                item_id: stockItem.id,
+                sector_id: formData.get("sector_id") as string,
+                quantity: parseInt(formData.get("quantity") as string, 10)
+              });
+            }} className="space-y-4 py-4">
+              <div className="space-y-2">
+                <Label>Material</Label>
+                <Input value={stockItem.name} disabled className="bg-slate-50" />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="sector_id">Setor de Armazenamento</Label>
+                <Select name="sector_id" required>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione onde este item está guardado" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {sectors.map((s: any) => (
+                      <SelectItem key={s.id} value={s.id}>
+                        {s.units?.name} - {s.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="quantity">Quantidade Atual (Saldo Final)</Label>
+                <Input id="quantity" name="quantity" type="number" min="0" placeholder="Ex: 50" required />
+                <p className="text-[10px] text-slate-500">Isso irá sobrescrever o saldo atual do item neste setor.</p>
+              </div>
+              <DialogFooter>
+                <Button type="button" variant="outline" onClick={() => setStockItem(null)}>Cancelar</Button>
+                <Button type="submit" className="bg-emerald-600 hover:bg-emerald-700 text-white" disabled={updateStockMutation.isPending}>
+                  {updateStockMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  Atualizar Saldo
                 </Button>
               </DialogFooter>
             </form>
