@@ -25,6 +25,7 @@ import Ambientes from "./pages/Ambientes.tsx";
 import Relatorios from "./pages/Relatorios.tsx";
 import Orcamentos from "./pages/Orcamentos.tsx";
 import Agenda from "./pages/Agenda.tsx";
+import Inventory from "./pages/Inventory.tsx";
 
 const queryClient = new QueryClient();
 
@@ -80,13 +81,7 @@ const App = () => (
                 />
                 <Route
                   path="/estoque"
-                  element={
-                    <PlaceholderPage
-                      title="Estoque"
-                      description="Controle de peças, periféricos e suprimentos"
-                      icon={Package}
-                    />
-                  }
+                  element={<Inventory />}
                 />
                 <Route
                   path="/chat-ia"
