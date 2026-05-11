@@ -163,7 +163,7 @@ export default function TicketDetail() {
         }
 
         const typebotId = "cmozq1cv9000007kjoz8nm4zk";
-        const typebotUrl = `https://typebot.co/api/v1/typebots/${typebotId}/startChat`;
+        const typebotUrl = `https://typebot.io/api/v1/typebots/${typebotId}/startChat`;
         
         console.log(`Sending message via Typebot Chat API: ${typebotUrl}`);
 
