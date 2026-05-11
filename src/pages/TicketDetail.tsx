@@ -156,7 +156,12 @@ export default function TicketDetail() {
       } else {
         // TYPEBOT CHAT API BYPASS: Use the chat start API to trigger the flow without 401 errors
         const phoneRaw = ticket.contacts?.phone;
-        const numericPart = String(phoneRaw ?? "").split(/[-@]/)[0].replace(/\D/g, "");
+        let numericPart = String(phoneRaw ?? "").split(/[-@]/)[0].replace(/\D/g, "");
+        
+        // Ensure Brazil DDI (55) if it looks like a local number (10 or 11 digits)
+        if (numericPart.length >= 10 && numericPart.length <= 11 && !numericPart.startsWith("55")) {
+          numericPart = "55" + numericPart;
+        }
         
         if (!numericPart) {
           throw new Error("Este contato não possui um número de telefone válido.");
