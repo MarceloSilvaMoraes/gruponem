@@ -150,13 +150,21 @@ const Inventory = () => {
   });
 
   const updateItemMutation = useMutation({
-    mutationFn: async ({ id, updates }: { id: string, updates: any }) => {
+    mutationFn: async ({ id, updates, edit_stock }: { id: string, updates: any, edit_stock?: any }) => {
       const { data, error } = await supabase.from("inventory_items").update(updates).eq("id", id).select();
       if (error) throw error;
+      
+      if (edit_stock && edit_stock.sector_id && edit_stock.quantity >= 0) {
+         const { error: stockError } = await supabase
+           .from("stock_levels")
+           .upsert({ item_id: id, sector_id: edit_stock.sector_id, quantity: edit_stock.quantity }, { onConflict: "item_id,sector_id" });
+         if (stockError) throw stockError;
+      }
       return data;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["inventory_items"] });
+      queryClient.invalidateQueries({ queryKey: ["stock_levels"] });
       toast.success("Item atualizado com sucesso!");
       setEditingItem(null);
     },
@@ -851,7 +859,6 @@ const Inventory = () => {
                         </TableCell>
                         <TableCell className="text-right">
                           <Button variant="ghost" size="sm" onClick={() => setEditingItem(item)}>Editar</Button>
-                          <Button variant="ghost" size="sm" className="text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 ml-1" onClick={() => setStockItem(item)}>+ Saldo</Button>
                         </TableCell>
                       </TableRow>
                     )})}
@@ -1023,12 +1030,15 @@ const Inventory = () => {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Editar Material</DialogTitle>
-            <DialogDescription>Altere as informações do item no catálogo geral.</DialogDescription>
+            <DialogDescription>Altere as informações do item e ajuste o saldo atual.</DialogDescription>
           </DialogHeader>
           {editingItem && (
             <form onSubmit={(e) => {
               e.preventDefault();
               const formData = new FormData(e.currentTarget);
+              const qty = parseInt(formData.get("edit_quantity") as string);
+              const sectorId = formData.get("edit_sector_id") as string;
+              
               updateItemMutation.mutate({
                 id: editingItem.id,
                 updates: {
@@ -1036,7 +1046,8 @@ const Inventory = () => {
                   category: formData.get("category"),
                   description: formData.get("description"),
                   sku: formData.get("sku") || null
-                }
+                },
+                edit_stock: sectorId && !isNaN(qty) ? { sector_id: sectorId, quantity: qty } : undefined
               });
             }} className="space-y-4 py-4">
               <div className="space-y-2">
@@ -1068,63 +1079,38 @@ const Inventory = () => {
                 <Label htmlFor="edit-description">Descrição</Label>
                 <Input id="edit-description" name="description" defaultValue={editingItem.description || ""} placeholder="Detalhes técnicos..." />
               </div>
+
+              <div className="border-t pt-4 mt-2">
+                <p className="text-sm font-medium text-slate-700 mb-3">Ajuste de Estoque (Opcional)</p>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="edit_sector_id">Setor/Unidade</Label>
+                    <Select name="edit_sector_id">
+                      <SelectTrigger>
+                        <SelectValue placeholder="Onde está guardado?" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {sectors.map((s: any) => (
+                          <SelectItem key={s.id} value={s.id}>
+                            {s.units?.name} - {s.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="edit_quantity">Quantidade Atual</Label>
+                    <Input id="edit_quantity" name="edit_quantity" type="number" min="0" placeholder="Saldo Final" />
+                  </div>
+                </div>
+                <p className="text-[10px] text-slate-500 mt-1">Se preenchido, irá sobrescrever o saldo atual do item neste setor.</p>
+              </div>
+
               <DialogFooter>
                 <Button type="button" variant="outline" onClick={() => setEditingItem(null)}>Cancelar</Button>
                 <Button type="submit" disabled={updateItemMutation.isPending}>
                   {updateItemMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                   Salvar Alterações
-                </Button>
-              </DialogFooter>
-            </form>
-          )}
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={!!stockItem} onOpenChange={(open) => !open && setStockItem(null)}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Lançar Saldo de Estoque</DialogTitle>
-            <DialogDescription>Ajuste a quantidade atual deste material em um setor específico.</DialogDescription>
-          </DialogHeader>
-          {stockItem && (
-            <form onSubmit={(e) => {
-              e.preventDefault();
-              const formData = new FormData(e.currentTarget);
-              updateStockMutation.mutate({
-                item_id: stockItem.id,
-                sector_id: formData.get("sector_id") as string,
-                quantity: parseInt(formData.get("quantity") as string, 10)
-              });
-            }} className="space-y-4 py-4">
-              <div className="space-y-2">
-                <Label>Material</Label>
-                <Input value={stockItem.name} disabled className="bg-slate-50" />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="sector_id">Setor de Armazenamento</Label>
-                <Select name="sector_id" required>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Selecione onde este item está guardado" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {sectors.map((s: any) => (
-                      <SelectItem key={s.id} value={s.id}>
-                        {s.units?.name} - {s.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="quantity">Quantidade Atual (Saldo Final)</Label>
-                <Input id="quantity" name="quantity" type="number" min="0" placeholder="Ex: 50" required />
-                <p className="text-[10px] text-slate-500">Isso irá sobrescrever o saldo atual do item neste setor.</p>
-              </div>
-              <DialogFooter>
-                <Button type="button" variant="outline" onClick={() => setStockItem(null)}>Cancelar</Button>
-                <Button type="submit" className="bg-emerald-600 hover:bg-emerald-700 text-white" disabled={updateStockMutation.isPending}>
-                  {updateStockMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                  Atualizar Saldo
                 </Button>
               </DialogFooter>
             </form>
