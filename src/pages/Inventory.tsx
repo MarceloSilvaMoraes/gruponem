@@ -12,7 +12,8 @@ import {
   CheckCircle2,
   Clock,
   AlertCircle,
-  Loader2
+  Loader2,
+  FileText
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
