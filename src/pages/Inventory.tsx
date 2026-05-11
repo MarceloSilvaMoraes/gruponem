@@ -61,6 +61,7 @@ const Inventory = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [isItemModalOpen, setIsItemModalOpen] = useState(false);
   const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
+  const [editingItem, setEditingItem] = useState<any>(null);
 
   // Queries para buscar dados reais do banco
   const { data: units = [] } = useQuery({
@@ -133,6 +134,20 @@ const Inventory = () => {
       setIsItemModalOpen(false);
     },
     onError: (error) => toast.error(`Erro ao cadastrar: ${error.message}`)
+  });
+
+  const updateItemMutation = useMutation({
+    mutationFn: async ({ id, updates }: { id: string, updates: any }) => {
+      const { data, error } = await supabase.from("inventory_items").update(updates).eq("id", id).select();
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["inventory_items"] });
+      toast.success("Item atualizado com sucesso!");
+      setEditingItem(null);
+    },
+    onError: (error) => toast.error(`Erro ao atualizar: ${error.message}`)
   });
 
   const addTransferMutation = useMutation({
@@ -778,7 +793,7 @@ const Inventory = () => {
                           )}
                         </TableCell>
                         <TableCell className="text-right">
-                          <Button variant="ghost" size="sm">Editar</Button>
+                          <Button variant="ghost" size="sm" onClick={() => setEditingItem(item)}>Editar</Button>
                         </TableCell>
                       </TableRow>
                     )})}
@@ -945,6 +960,67 @@ const Inventory = () => {
            </div>
         </TabsContent>
       </Tabs>
+
+      <Dialog open={!!editingItem} onOpenChange={(open) => !open && setEditingItem(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Editar Material</DialogTitle>
+            <DialogDescription>Altere as informações do item no catálogo geral.</DialogDescription>
+          </DialogHeader>
+          {editingItem && (
+            <form onSubmit={(e) => {
+              e.preventDefault();
+              const formData = new FormData(e.currentTarget);
+              updateItemMutation.mutate({
+                id: editingItem.id,
+                updates: {
+                  name: formData.get("name"),
+                  category: formData.get("category"),
+                  description: formData.get("description"),
+                  sku: formData.get("sku") || null
+                }
+              });
+            }} className="space-y-4 py-4">
+              <div className="space-y-2">
+                <Label htmlFor="edit-name">Nome do Material</Label>
+                <Input id="edit-name" name="name" defaultValue={editingItem.name} required />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="edit-category">Categoria</Label>
+                  <Select name="category" defaultValue={editingItem.category} required>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecione" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Rede">Rede</SelectItem>
+                      <SelectItem value="Periféricos">Periféricos</SelectItem>
+                      <SelectItem value="Cabeamento">Cabeamento</SelectItem>
+                      <SelectItem value="Computadores">Computadores</SelectItem>
+                      <SelectItem value="Outros">Outros</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="edit-sku">Código/SKU (Opcional)</Label>
+                  <Input id="edit-sku" name="sku" defaultValue={editingItem.sku || ""} placeholder="Ex: MK-001" />
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="edit-description">Descrição</Label>
+                <Input id="edit-description" name="description" defaultValue={editingItem.description || ""} placeholder="Detalhes técnicos..." />
+              </div>
+              <DialogFooter>
+                <Button type="button" variant="outline" onClick={() => setEditingItem(null)}>Cancelar</Button>
+                <Button type="submit" disabled={updateItemMutation.isPending}>
+                  {updateItemMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  Salvar Alterações
+                </Button>
+              </DialogFooter>
+            </form>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
