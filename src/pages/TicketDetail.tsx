@@ -167,17 +167,21 @@ export default function TicketDetail() {
         
         console.log(`Sending message via Typebot Chat API: ${typebotUrl}`);
 
+        const payload = { 
+          prefilledVariables: {
+            number: numericPart,
+            text: reply.trim()
+          }
+        };
+        
+        console.log("Typebot Payload:", JSON.stringify(payload, null, 2));
+
         const typebotRes = await fetch(typebotUrl, {
           method: "POST",
           headers: { 
             "Content-Type": "application/json"
           },
-          body: JSON.stringify({ 
-            prefilledVariables: {
-              number: numericPart,
-              text: reply.trim()
-            }
-          }),
+          body: JSON.stringify(payload),
         });
 
         if (!typebotRes.ok) {
