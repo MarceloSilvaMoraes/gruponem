@@ -14,6 +14,153 @@ export type Database = {
   }
   public: {
     Tables: {
+      inventory_items: {
+        Row: {
+          id: string
+          name: string
+          description: string | null
+          category: string | null
+          sku: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          name: string
+          description?: string | null
+          category?: string | null
+          sku?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          name?: string
+          description?: string | null
+          category?: string | null
+          sku?: string | null
+          created_at?: string
+        }
+        Relationships: []
+      },
+      units: {
+        Row: {
+          id: string
+          name: string
+          municipality: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          name: string
+          municipality: string
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          name?: string
+          municipality?: string
+          created_at?: string
+        }
+        Relationships: []
+      },
+      sectors: {
+        Row: {
+          id: string
+          unit_id: string
+          name: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          unit_id: string
+          name: string
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          unit_id?: string
+          name?: string
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sectors_unit_id_fkey"
+            columns: ["unit_id"]
+            isOneToOne: false
+            referencedRelation: "units"
+            referencedColumns: ["id"]
+          }
+        ]
+      },
+      inventory_transfers: {
+        Row: {
+          id: string
+          item_id: string | null
+          origin_sector_id: string | null
+          destination_sector_id: string | null
+          quantity: number
+          freight_cost: number | null
+          port_name: string | null
+          vessel_name: string | null
+          carrier_name: string | null
+          status: string | null
+          sent_at: string | null
+          received_at: string | null
+          created_by: string | null
+        }
+        Insert: {
+          id?: string
+          item_id?: string | null
+          origin_sector_id?: string | null
+          destination_sector_id?: string | null
+          quantity: number
+          freight_cost?: number | null
+          port_name?: string | null
+          vessel_name?: string | null
+          carrier_name?: string | null
+          status?: string | null
+          sent_at?: string | null
+          received_at?: string | null
+          created_by?: string | null
+        }
+        Update: {
+          id?: string
+          item_id?: string | null
+          origin_sector_id?: string | null
+          destination_sector_id?: string | null
+          quantity?: number
+          freight_cost?: number | null
+          port_name?: string | null
+          vessel_name?: string | null
+          carrier_name?: string | null
+          status?: string | null
+          sent_at?: string | null
+          received_at?: string | null
+          created_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "inventory_transfers_destination_sector_id_fkey"
+            columns: ["destination_sector_id"]
+            isOneToOne: false
+            referencedRelation: "sectors"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inventory_transfers_item_id_fkey"
+            columns: ["item_id"]
+            isOneToOne: false
+            referencedRelation: "inventory_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inventory_transfers_origin_sector_id_fkey"
+            columns: ["origin_sector_id"]
+            isOneToOne: false
+            referencedRelation: "sectors"
+            referencedColumns: ["id"]
+          }
+        ]
+      },
       app_settings: {
         Row: {
           id: string
