@@ -162,7 +162,7 @@ export default function TicketDetail() {
           throw new Error("Este contato não possui um número de telefone válido.");
         }
 
-        const typebotId = "cmozq1cv9000007kjoz8nm4zk";
+        const typebotId = "meu-typebot-z8nm4zk";
         const typebotUrl = `https://typebot.io/api/v1/typebots/${typebotId}/startChat`;
         
         console.log(`Sending message via Typebot Chat API: ${typebotUrl}`);
@@ -182,6 +182,7 @@ export default function TicketDetail() {
 
         if (!typebotRes.ok) {
           const errText = await typebotRes.text();
+          console.error("Typebot Error Response:", errText);
           throw new Error(`Erro no Typebot: ${typebotRes.status} - ${errText}`);
         }
 
