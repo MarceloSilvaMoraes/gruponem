@@ -3,7 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Calendar as CalendarIcon, Clock, User, MapPin, Search, Monitor, ArrowLeft, Plus, MessageSquare } from "lucide-react";
+import { Calendar as CalendarIcon, Clock, User, MapPin, Search, Monitor, ArrowLeft, Plus, MessageSquare, Pencil } from "lucide-react";
 import { format, parse, isToday, isBefore, startOfDay } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { Input } from "@/components/ui/input";
@@ -22,6 +22,8 @@ export default function Agenda() {
   const [tvMode, setTvMode] = useState(false);
   const [currentTime, setCurrentTime] = useState(new Date());
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [editingBooking, setEditingBooking] = useState<any>(null);
   const queryClient = useQueryClient();
 
   // Estados para o novo agendamento
@@ -29,6 +31,16 @@ export default function Agenda() {
     environment_id: "",
     environment_name: "",
     date: format(new Date(), "yyyy-MM-dd"),
+    start_time: "08:00",
+    end_time: "09:00",
+    requester_name: "",
+    reason: ""
+  });
+
+  const [editForm, setEditForm] = useState({
+    id: "",
+    environment_name: "",
+    date: "",
     start_time: "08:00",
     end_time: "09:00",
     requester_name: "",
@@ -186,6 +198,62 @@ export default function Agenda() {
       console.error("Erro ao criar agendamento:", err);
       toast.error(`Erro ao criar: ${err.message || "Tente novamente"}`);
     }
+  };
+
+  const handleUpdateBooking = async () => {
+    if (!editForm.environment_name || !editForm.requester_name) {
+      toast.error("Preencha os campos obrigatórios");
+      return;
+    }
+
+    try {
+      // 1. Reconstruir o Subject
+      const [year, month, day] = editForm.date.split("-");
+      const formattedDate = `${day}/${month}`;
+      const subject = `[AGENDA] ${editForm.environment_name} - ${formattedDate} das ${editForm.start_time} às ${editForm.end_time}`;
+
+      // 2. Atualizar o Ticket
+      const { error } = await (supabase as any)
+        .from("tickets")
+        .update({
+          subject,
+          description: editForm.reason
+        })
+        .eq("id", editForm.id);
+
+      if (error) throw error;
+
+      toast.success("Reserva atualizada!");
+      setIsEditModalOpen(false);
+      queryClient.invalidateQueries({ queryKey: ["bookings-combined"] });
+    } catch (err: any) {
+      console.error("Erro ao atualizar:", err);
+      toast.error("Erro ao atualizar reserva");
+    }
+  };
+
+  const openEditModal = (booking: any) => {
+    // Extrair data do ISO
+    const dateObj = new Date(booking.start_time);
+    const dateStr = format(dateObj, "yyyy-MM-dd");
+    
+    // Extrair horários do display_time (ex: "08:00 às 09:00")
+    let start = "08:00";
+    let end = "09:00";
+    const times = booking.display_time.split(/\s*as\s*|\s*às\s*|\s*-\s*/i);
+    if (times.length >= 1) start = times[0].replace("h", ":");
+    if (times.length >= 2) end = times[1].replace("h", ":");
+
+    setEditForm({
+      id: booking.id,
+      environment_name: booking.environment_name,
+      date: dateStr,
+      start_time: start.includes(":") ? start : `${start}:00`,
+      end_time: end.includes(":") ? end : `${end}:00`,
+      requester_name: booking.requester_name,
+      reason: booking.description
+    });
+    setIsEditModalOpen(true);
   };
 
   const confirmBooking = async (booking: any) => {
@@ -401,6 +469,65 @@ export default function Agenda() {
           <Button variant="outline" onClick={() => setTvMode(true)} className="gap-2">
             <Monitor className="h-4 w-4" /> Modo TV
           </Button>
+
+          {/* Modal de Edição */}
+          <Dialog open={isEditModalOpen} onOpenChange={setIsEditModalOpen}>
+            <DialogContent className="sm:max-w-[500px]">
+              <DialogHeader>
+                <DialogTitle>Editar Agendamento</DialogTitle>
+              </DialogHeader>
+              <div className="grid gap-4 py-4">
+                <div className="grid gap-2">
+                  <Label>Ambiente</Label>
+                  <Select 
+                    value={environments?.find(e => e.name === editForm.environment_name)?.id || ""}
+                    onValueChange={(val) => {
+                      const env = environments?.find(e => e.id === val);
+                      setEditForm(prev => ({ ...prev, environment_name: env?.name || "" }));
+                    }}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecione a sala" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {environments?.map(env => (
+                        <SelectItem key={env.id} value={env.id}>{env.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="grid gap-2">
+                    <Label>Data</Label>
+                    <Input type="date" value={editForm.date} onChange={e => setEditForm(prev => ({ ...prev, date: e.target.value }))} />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label>Responsável (Apenas leitura)</Label>
+                    <Input value={editForm.requester_name} disabled className="bg-muted" />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="grid gap-2">
+                    <Label>Início</Label>
+                    <Input type="time" value={editForm.start_time} onChange={e => setEditForm(prev => ({ ...prev, start_time: e.target.value }))} />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label>Fim</Label>
+                    <Input type="time" value={editForm.end_time} onChange={e => setEditForm(prev => ({ ...prev, end_time: e.target.value }))} />
+                  </div>
+                </div>
+                <div className="grid gap-2">
+                  <Label>Motivo / Descrição</Label>
+                  <Textarea placeholder="Para que será usada a sala?" value={editForm.reason} onChange={e => setEditForm(prev => ({ ...prev, reason: e.target.value }))} />
+                </div>
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setIsEditModalOpen(false)}>Cancelar</Button>
+                <Button onClick={handleUpdateBooking}>Salvar Alterações</Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+
           <div className="relative w-full md:w-64">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input 
@@ -480,6 +607,14 @@ export default function Agenda() {
                                 Confirmar
                               </Button>
                             )}
+                            <Button 
+                              size="sm" 
+                              variant="outline" 
+                              className="h-8 text-xs"
+                              onClick={() => openEditModal(booking)}
+                            >
+                              <Pencil className="h-3 w-3 mr-1" /> Editar
+                            </Button>
                             <Button 
                               size="sm" 
                               variant="outline" 
