@@ -200,6 +200,72 @@ const Inventory = () => {
             </DialogContent>
           </Dialog>
 
+          <Dialog>
+            <DialogTrigger asChild>
+              <Button variant="outline" className="border-emerald-200 text-emerald-700 hover:bg-emerald-50">
+                <FileText className="w-4 h-4 mr-2" /> Importar Planilha
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Importar Itens via CSV</DialogTitle>
+                <DialogDescription>Suba uma planilha com seus materiais para cadastro em massa.</DialogDescription>
+              </DialogHeader>
+              <div className="space-y-6 py-4">
+                <div className="bg-slate-50 p-4 rounded-lg border border-dashed border-slate-300">
+                  <p className="text-sm font-medium text-slate-700 mb-2">Instruções:</p>
+                  <ul className="text-xs text-slate-500 space-y-1 list-disc ml-4">
+                    <li>Use formato CSV (separado por vírgulas).</li>
+                    <li>Colunas necessárias: <code className="bg-slate-200 px-1 rounded">nome, categoria, descricao, sku</code></li>
+                    <li>A categoria deve ser uma das existentes (Rede, Periféricos, etc).</li>
+                  </ul>
+                  <Button variant="link" className="text-xs p-0 h-auto mt-2 text-primary" onClick={() => {
+                    const csvContent = "nome,categoria,descricao,sku\nExemplo Teclado,Periféricos,Teclado Mecânico USB,SKU001\nExemplo Roteador,Rede,Roteador WiFi 6,SKU002";
+                    const blob = new Blob([csvContent], { type: 'text/csv' });
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.setAttribute('hidden', '');
+                    a.setAttribute('href', url);
+                    a.setAttribute('download', 'modelo_estoque.csv');
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                  }}>
+                    Baixar Modelo de Exemplo
+                  </Button>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="csvFile">Selecione o arquivo .csv</Label>
+                  <Input id="csvFile" type="file" accept=".csv" onChange={async (e) => {
+                    const file = e.target.files?.[0];
+                    if (!file) return;
+
+                    const reader = new FileReader();
+                    reader.onload = async (event) => {
+                      const text = event.target?.result as string;
+                      const rows = text.split("\n").slice(1); // Ignora o cabeçalho
+                      const items = rows.map(row => {
+                        const [name, category, description, sku] = row.split(",").map(s => s.trim());
+                        if (!name) return null;
+                        return { name, category, description, sku };
+                      }).filter(Boolean);
+
+                      if (items.length > 0) {
+                        const { error } = await supabase.from("inventory_items").insert(items);
+                        if (error) toast.error(`Erro na importação: ${error.message}`);
+                        else {
+                          queryClient.invalidateQueries({ queryKey: ["inventory_items"] });
+                          toast.success(`${items.length} itens importados com sucesso!`);
+                        }
+                      }
+                    };
+                    reader.readAsText(file);
+                  }} />
+                </div>
+              </div>
+            </DialogContent>
+          </Dialog>
+
           <Dialog open={isTransferModalOpen} onOpenChange={setIsTransferModalOpen}>
             <DialogTrigger asChild>
               <Button variant="outline">
