@@ -124,13 +124,25 @@ const Inventory = () => {
 
   // Mutations para salvar dados
   const addItemMutation = useMutation({
-    mutationFn: async (newItem: any) => {
+    mutationFn: async (payload: any) => {
+      const { initial_sector_id, initial_quantity, ...newItem } = payload;
       const { data, error } = await supabase.from("inventory_items").insert([newItem]).select();
       if (error) throw error;
+      
+      const createdItem = data[0];
+      if (initial_sector_id && initial_quantity > 0) {
+        const { error: stockError } = await supabase.from("stock_levels").insert([{
+          item_id: createdItem.id,
+          sector_id: initial_sector_id,
+          quantity: initial_quantity
+        }]);
+        if (stockError) throw stockError;
+      }
       return data;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["inventory_items"] });
+      queryClient.invalidateQueries({ queryKey: ["stock_levels"] });
       toast.success("Item cadastrado com sucesso!");
       setIsItemModalOpen(false);
     },
@@ -316,11 +328,14 @@ const Inventory = () => {
               <form onSubmit={(e) => {
                 e.preventDefault();
                 const formData = new FormData(e.currentTarget);
+                const initialQty = parseInt(formData.get("initial_quantity") as string);
                 addItemMutation.mutate({
                   name: formData.get("name"),
                   category: formData.get("category"),
                   description: formData.get("description"),
-                  sku: formData.get("sku") || undefined
+                  sku: formData.get("sku") || undefined,
+                  initial_sector_id: formData.get("initial_sector_id") || undefined,
+                  initial_quantity: isNaN(initialQty) ? 0 : initialQty
                 });
               }} className="space-y-4 py-4">
                 <div className="space-y-2">
@@ -350,6 +365,30 @@ const Inventory = () => {
                 <div className="space-y-2">
                   <Label htmlFor="description">Descrição</Label>
                   <Input id="description" name="description" placeholder="Detalhes técnicos..." />
+                </div>
+                <div className="border-t pt-4 mt-2">
+                  <p className="text-sm font-medium text-slate-700 mb-3">Estoque Inicial (Opcional)</p>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="initial_sector_id">Setor/Unidade</Label>
+                      <Select name="initial_sector_id">
+                        <SelectTrigger>
+                          <SelectValue placeholder="Onde está guardado?" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {sectors.map((s: any) => (
+                            <SelectItem key={s.id} value={s.id}>
+                              {s.units?.name} - {s.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="initial_quantity">Quantidade</Label>
+                      <Input id="initial_quantity" name="initial_quantity" type="number" min="1" placeholder="Ex: 10" />
+                    </div>
+                  </div>
                 </div>
                 <DialogFooter>
                   <Button type="submit" disabled={addItemMutation.isPending}>
