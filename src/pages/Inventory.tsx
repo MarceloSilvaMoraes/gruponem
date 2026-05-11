@@ -13,7 +13,11 @@ import {
   Clock,
   AlertCircle,
   Loader2,
-  FileText
+  FileText,
+  ShieldCheck,
+  Ship,
+  Anchor,
+  ArrowRight
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -118,17 +122,36 @@ const Inventory = () => {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["inventory_transfers"] });
-      toast.success("Transferência registrada!");
+      toast.success("Solicitação enviada para o Fluxo!");
       setIsTransferModalOpen(false);
     },
-    onError: (error) => toast.error(`Erro na transferência: ${error.message}`)
+    onError: (error) => toast.error(`Erro na solicitação: ${error.message}`)
+  });
+
+  const updateTransferStatus = useMutation({
+    mutationFn: async ({ id, status, updates = {} }: { id: string, status: string, updates?: any }) => {
+      const { data, error } = await supabase
+        .from("inventory_transfers")
+        .update({ status, ...updates })
+        .eq("id", id);
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["inventory_transfers"] });
+      toast.success("Status atualizado!");
+    },
+    onError: (error) => toast.error(`Erro ao atualizar: ${error.message}`)
   });
 
   const getStatusBadge = (status: string) => {
     switch (status) {
       case "recebido": return <Badge variant="secondary" className="bg-emerald-100 text-emerald-700"><CheckCircle2 className="w-3 h-3 mr-1" /> Recebido</Badge>;
-      case "em_transito": return <Badge variant="secondary" className="bg-blue-100 text-blue-700"><Clock className="w-3 h-3 mr-1" /> Em Trânsito</Badge>;
-      case "pendente": return <Badge variant="secondary" className="bg-amber-100 text-amber-700"><AlertCircle className="w-3 h-3 mr-1" /> Pendente</Badge>;
+      case "em_transito": return <Badge variant="secondary" className="bg-blue-100 text-blue-700"><Ship className="w-3 h-3 mr-1" /> No Rio/Caminho</Badge>;
+      case "liberado_logistica": return <Badge variant="secondary" className="bg-purple-100 text-purple-700"><Anchor className="w-3 h-3 mr-1" /> Pronto p/ Porto</Badge>;
+      case "aguardando_aprovacao": return <Badge variant="secondary" className="bg-amber-100 text-amber-700"><ShieldCheck className="w-3 h-3 mr-1" /> Aprovação Pendente</Badge>;
+      case "cotacao": return <Badge variant="secondary" className="bg-rose-100 text-rose-700"><FileText className="w-3 h-3 mr-1" /> Em Cotação</Badge>;
+      case "pendente": return <Badge variant="secondary" className="bg-slate-100 text-slate-700"><Clock className="w-3 h-3 mr-1" /> Solicitado</Badge>;
       default: return <Badge>{status}</Badge>;
     }
   };
@@ -138,10 +161,9 @@ const Inventory = () => {
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
           <h1 className="text-3xl font-bold tracking-tight text-slate-900">Estoque & Logística</h1>
-          <p className="text-slate-500">Controle de materiais e transferências intermunicipais</p>
+          <p className="text-slate-500">Gestão de materiais e fluxo de aprovação intermunicipal</p>
         </div>
         <div className="flex gap-2">
-          
           <Dialog open={isItemModalOpen} onOpenChange={setIsItemModalOpen}>
             <DialogTrigger asChild>
               <Button className="bg-primary hover:bg-primary/90">
@@ -270,13 +292,13 @@ const Inventory = () => {
           <Dialog open={isTransferModalOpen} onOpenChange={setIsTransferModalOpen}>
             <DialogTrigger asChild>
               <Button variant="outline">
-                <ArrowRightLeft className="w-4 h-4 mr-2" /> Nova Transferência
+                <ArrowRightLeft className="w-4 h-4 mr-2" /> Nova Solicitação
               </Button>
             </DialogTrigger>
             <DialogContent className="max-w-md">
               <DialogHeader>
-                <DialogTitle>Registrar Transferência</DialogTitle>
-                <DialogDescription>Mova materiais entre unidades e setores.</DialogDescription>
+                <DialogTitle>Solicitar Envio de Material</DialogTitle>
+                <DialogDescription>Inicie o fluxo de envio para uma unidade/setor.</DialogDescription>
               </DialogHeader>
               <form onSubmit={(e) => {
                 e.preventDefault();
@@ -286,13 +308,11 @@ const Inventory = () => {
                   origin_sector_id: formData.get("origin_sector_id"),
                   destination_sector_id: formData.get("destination_sector_id"),
                   quantity: parseInt(formData.get("quantity") as string),
-                  freight_cost: parseFloat(formData.get("freight_cost") as string || "0"),
-                  carrier_name: formData.get("carrier_name"),
-                  status: "em_transito"
+                  status: "aguardando_aprovacao" // Inicia aguardando aprovação
                 });
               }} className="space-y-4 py-4">
                 <div className="space-y-2">
-                  <Label>Item para Transferir</Label>
+                  <Label>Item Solicitado</Label>
                   <Select name="item_id" required>
                     <SelectTrigger>
                       <SelectValue placeholder="Escolha o item" />
@@ -304,10 +324,10 @@ const Inventory = () => {
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <Label>Origem (Setor)</Label>
+                    <Label>De (Setor de Saída)</Label>
                     <Select name="origin_sector_id" required>
                       <SelectTrigger>
-                        <SelectValue placeholder="De onde sai?" />
+                        <SelectValue placeholder="Origem" />
                       </SelectTrigger>
                       <SelectContent>
                         {sectors.map(s => <SelectItem key={s.id} value={s.id}>{s.units?.name} - {s.name}</SelectItem>)}
@@ -315,35 +335,25 @@ const Inventory = () => {
                     </Select>
                   </div>
                   <div className="space-y-2">
-                    <Label>Destino (Setor)</Label>
+                    <Label>Para (Destino)</Label>
                     <Select name="destination_sector_id" required>
                       <SelectTrigger>
-                        <SelectValue placeholder="Para onde vai?" />
+                        <SelectValue placeholder="Destino" />
                       </SelectTrigger>
                       <SelectContent>
                         {sectors.map(s => <SelectItem key={s.id} value={s.id}>{s.units?.name} - {s.name}</SelectItem>)}
                       </SelectContent>
                     </Select>
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label>Quantidade</Label>
-                    <Input name="quantity" type="number" min="1" required />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Custo do Frete (R$)</Label>
-                    <Input name="freight_cost" type="number" step="0.01" placeholder="0,00" required />
                   </div>
                 </div>
                 <div className="space-y-2">
-                  <Label>Responsável pelo Transporte</Label>
-                  <Input name="carrier_name" placeholder="Ex: Transportadora X ou Motorista" />
+                  <Label>Quantidade</Label>
+                  <Input name="quantity" type="number" min="1" required />
                 </div>
                 <DialogFooter>
                   <Button type="submit" disabled={addTransferMutation.isPending}>
                     {addTransferMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                    Confirmar Envio
+                    Enviar para Aprovação
                   </Button>
                 </DialogFooter>
               </form>
@@ -357,26 +367,13 @@ const Inventory = () => {
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-slate-500">Itens Cadastrados</p>
-                <h3 className="text-2xl font-bold mt-1 text-slate-900">{inventory.length}</h3>
-              </div>
-              <div className="p-3 rounded-xl bg-blue-50 text-blue-600">
-                <Package className="w-6 h-6" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card className="border-none shadow-sm group">
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-slate-500">Em Trânsito</p>
-                <h3 className="text-2xl font-bold mt-1 text-slate-900">
-                  {transfers.filter(t => t.status === "em_transito").length}
+                <p className="text-sm font-medium text-slate-500">Pedidos p/ Aprovar</p>
+                <h3 className="text-2xl font-bold mt-1 text-amber-600">
+                  {transfers.filter(t => t.status === "aguardando_aprovacao").length}
                 </h3>
               </div>
               <div className="p-3 rounded-xl bg-amber-50 text-amber-600">
-                <Truck className="w-6 h-6" />
+                <ShieldCheck className="w-6 h-6" />
               </div>
             </div>
           </CardContent>
@@ -385,7 +382,37 @@ const Inventory = () => {
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-slate-500">Custos Logísticos (Total)</p>
+                <p className="text-sm font-medium text-slate-500">Prontos p/ Porto</p>
+                <h3 className="text-2xl font-bold mt-1 text-purple-600">
+                  {transfers.filter(t => t.status === "liberado_logistica").length}
+                </h3>
+              </div>
+              <div className="p-3 rounded-xl bg-purple-50 text-purple-600">
+                <Anchor className="w-6 h-6" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        <Card className="border-none shadow-sm group">
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-slate-500">Em Trânsito (Rio)</p>
+                <h3 className="text-2xl font-bold mt-1 text-blue-600">
+                  {transfers.filter(t => t.status === "em_transito").length}
+                </h3>
+              </div>
+              <div className="p-3 rounded-xl bg-blue-50 text-blue-600">
+                <Ship className="w-6 h-6" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        <Card className="border-none shadow-sm group">
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-slate-500">Gasto Frete (Mês)</p>
                 <h3 className="text-2xl font-bold mt-1 text-emerald-600">
                   R$ {transfers.reduce((acc, curr) => acc + (curr.freight_cost || 0), 0).toFixed(2)}
                 </h3>
@@ -396,33 +423,146 @@ const Inventory = () => {
             </div>
           </CardContent>
         </Card>
-        <Card className="border-none shadow-sm group">
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-slate-500">Unidades Ativas</p>
-                <h3 className="text-2xl font-bold mt-1 text-purple-900">{units.length}</h3>
-              </div>
-              <div className="p-3 rounded-xl bg-purple-50 text-purple-600">
-                <Building2 className="w-6 h-6" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
       </div>
 
-      <Tabs defaultValue="inventory" className="space-y-6">
+      <Tabs defaultValue="workflow" className="space-y-6">
         <TabsList className="bg-white border p-1 shadow-sm h-12">
-          <TabsTrigger value="inventory" className="data-[state=active]:bg-primary data-[state=active]:text-white px-6">
-            <Package className="w-4 h-4 mr-2" /> Catálogo de Materiais
+          <TabsTrigger value="workflow" className="data-[state=active]:bg-primary data-[state=active]:text-white px-6">
+            <ArrowRightLeft className="w-4 h-4 mr-2" /> Fluxo de Envio
           </TabsTrigger>
-          <TabsTrigger value="transfers" className="data-[state=active]:bg-primary data-[state=active]:text-white px-6">
-            <Truck className="w-4 h-4 mr-2" /> Logística & Fretes
+          <TabsTrigger value="inventory" className="data-[state=active]:bg-primary data-[state=active]:text-white px-6">
+            <Package className="w-4 h-4 mr-2" /> Catálogo Geral
           </TabsTrigger>
           <TabsTrigger value="units" className="data-[state=active]:bg-primary data-[state=active]:text-white px-6">
             <Building2 className="w-4 h-4 mr-2" /> Unidades e Setores
           </TabsTrigger>
         </TabsList>
+
+        <TabsContent value="workflow" className="space-y-6">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            {/* COLUNA 1: AGUARDANDO APROVAÇÃO */}
+            <div className="space-y-4">
+              <div className="flex items-center justify-between px-2">
+                <h3 className="font-bold text-slate-700 flex items-center"><ShieldCheck className="w-4 h-4 mr-2 text-amber-500" /> Aprovação (Financeiro/CEO)</h3>
+                <Badge variant="outline">{transfers.filter(t => t.status === "aguardando_aprovacao").length}</Badge>
+              </div>
+              <div className="space-y-3">
+                {transfers.filter(t => t.status === "aguardando_aprovacao").map(t => (
+                  <Card key={t.id} className="border-l-4 border-l-amber-400 shadow-sm hover:shadow-md transition-all">
+                    <CardContent className="p-4 space-y-3">
+                      <div className="flex justify-between items-start">
+                        <span className="font-bold text-slate-900">{t.inventory_items?.name}</span>
+                        <span className="text-xs bg-slate-100 px-2 py-1 rounded">Qtd: {t.quantity}</span>
+                      </div>
+                      <div className="text-xs text-slate-500 flex items-center gap-1">
+                        <MapPin className="w-3 h-3" /> {t.origin?.units?.name} ➡️ {t.destination?.units?.name}
+                      </div>
+                      <div className="flex gap-2 pt-2">
+                        <Button size="sm" className="flex-1 bg-emerald-600 hover:bg-emerald-700 h-8 text-xs" onClick={() => updateTransferStatus.mutate({ id: t.id, status: 'liberado_logistica' })}>Aprovar Envio</Button>
+                        <Button size="sm" variant="ghost" className="h-8 text-xs text-rose-600 hover:text-rose-700" onClick={() => updateTransferStatus.mutate({ id: t.id, status: 'cancelado' })}>Recusar</Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+                {transfers.filter(t => t.status === "aguardando_aprovacao").length === 0 && (
+                  <div className="text-center py-8 text-slate-400 text-xs border border-dashed rounded-lg">Nenhum pedido pendente de aprovação.</div>
+                )}
+              </div>
+            </div>
+
+            {/* COLUNA 2: LOGÍSTICA / PORTO */}
+            <div className="space-y-4">
+              <div className="flex items-center justify-between px-2">
+                <h3 className="font-bold text-slate-700 flex items-center"><Anchor className="w-4 h-4 mr-2 text-purple-500" /> Logística (Porto/Frete)</h3>
+                <Badge variant="outline">{transfers.filter(t => t.status === "liberado_logistica").length}</Badge>
+              </div>
+              <div className="space-y-3">
+                {transfers.filter(t => t.status === "liberado_logistica").map(t => (
+                  <Card key={t.id} className="border-l-4 border-l-purple-400 shadow-sm">
+                    <CardContent className="p-4 space-y-3">
+                      <div className="flex justify-between items-start">
+                        <span className="font-bold text-slate-900">{t.inventory_items?.name}</span>
+                        <Badge variant="outline" className="text-[10px] text-emerald-600 border-emerald-200">Aprovado</Badge>
+                      </div>
+                      <Dialog>
+                        <DialogTrigger asChild>
+                          <Button size="sm" variant="outline" className="w-full h-8 text-xs"><Ship className="w-3 h-3 mr-1" /> Definir Porto & Frete</Button>
+                        </DialogTrigger>
+                        <DialogContent>
+                          <DialogHeader><DialogTitle>Detalhes da Logística</DialogTitle></DialogHeader>
+                          <form onSubmit={(e) => {
+                            e.preventDefault();
+                            const formData = new FormData(e.currentTarget);
+                            updateTransferStatus.mutate({ 
+                              id: t.id, 
+                              status: 'em_transito',
+                              updates: {
+                                port_name: formData.get("port_name"),
+                                vessel_name: formData.get("vessel_name"),
+                                freight_cost: parseFloat(formData.get("freight_cost") as string),
+                                carrier_name: formData.get("carrier_name")
+                              }
+                            });
+                          }} className="space-y-4 py-4">
+                            <div className="grid grid-cols-2 gap-4">
+                              <div className="space-y-2">
+                                <Label>Porto de Saída</Label>
+                                <Input name="port_name" placeholder="Ex: Porto da Escadinha" required />
+                              </div>
+                              <div className="space-y-2">
+                                <Label>Embarcação</Label>
+                                <Input name="vessel_name" placeholder="Ex: B/M Silva" required />
+                              </div>
+                            </div>
+                            <div className="space-y-2">
+                              <Label>Valor do Frete (R$)</Label>
+                              <Input name="freight_cost" type="number" step="0.01" required />
+                            </div>
+                            <Button type="submit" className="w-full">Confirmar Saída do Barco</Button>
+                          </form>
+                        </DialogContent>
+                      </Dialog>
+                    </CardContent>
+                  </Card>
+                ))}
+                {transfers.filter(t => t.status === "liberado_logistica").length === 0 && (
+                  <div className="text-center py-8 text-slate-400 text-xs border border-dashed rounded-lg">Nada liberado para logística no momento.</div>
+                )}
+              </div>
+            </div>
+
+            {/* COLUNA 3: EM TRÂNSITO / RECEBER */}
+            <div className="space-y-4">
+              <div className="flex items-center justify-between px-2">
+                <h3 className="font-bold text-slate-700 flex items-center"><Ship className="w-4 h-4 mr-2 text-blue-500" /> Em Trânsito (Rio/Caminho)</h3>
+                <Badge variant="outline">{transfers.filter(t => t.status === "em_transito").length}</Badge>
+              </div>
+              <div className="space-y-3">
+                {transfers.filter(t => t.status === "em_transito").map(t => (
+                  <Card key={t.id} className="border-l-4 border-l-blue-400 shadow-sm bg-blue-50/20">
+                    <CardContent className="p-4 space-y-3">
+                      <div className="flex justify-between items-start">
+                        <span className="font-bold text-slate-900">{t.inventory_items?.name}</span>
+                        <div className="text-right">
+                          <p className="text-[10px] font-bold text-emerald-600">Frete: R$ {t.freight_cost}</p>
+                        </div>
+                      </div>
+                      <div className="text-[10px] space-y-1 bg-white p-2 rounded border">
+                        <p className="flex justify-between"><span>Barco:</span> <span className="font-bold">{t.vessel_name}</span></p>
+                        <p className="flex justify-between"><span>Porto:</span> <span className="font-bold">{t.port_name}</span></p>
+                        <p className="flex justify-between"><span>Destino:</span> <span className="font-bold text-primary">{t.destination?.units?.municipality}</span></p>
+                      </div>
+                      <Button size="sm" className="w-full bg-slate-800 hover:bg-slate-900 h-8 text-xs" onClick={() => updateTransferStatus.mutate({ id: t.id, status: 'recebido', updates: { received_at: new Date().toISOString() } })}>Confirmar Recebimento</Button>
+                    </CardContent>
+                  </Card>
+                ))}
+                {transfers.filter(t => t.status === "em_transito").length === 0 && (
+                  <div className="text-center py-8 text-slate-400 text-xs border border-dashed rounded-lg">Nenhuma carga em trânsito.</div>
+                )}
+              </div>
+            </div>
+          </div>
+        </TabsContent>
 
         <TabsContent value="inventory" className="space-y-4">
           <Card className="border-none shadow-sm">
@@ -469,75 +609,6 @@ const Inventory = () => {
                         <TableCell colSpan={4} className="text-center py-8 text-slate-500">Nenhum item cadastrado.</TableCell>
                       </TableRow>
                     )}
-                  </TableBody>
-                </Table>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="transfers" className="space-y-4">
-          <Card className="border-none shadow-sm">
-            <CardHeader className="pb-3 border-b">
-              <CardTitle className="text-lg">Rastreio de Logística</CardTitle>
-            </CardHeader>
-            <CardContent className="p-0">
-              {loadingTransfers ? (
-                <div className="p-12 flex justify-center"><Loader2 className="animate-spin text-primary" /></div>
-              ) : (
-                <Table>
-                  <TableHeader className="bg-slate-50/50">
-                    <TableRow>
-                      <TableHead>Item</TableHead>
-                      <TableHead>Origem ➡️ Destino</TableHead>
-                      <TableHead>Frete (R$)</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead>Transportadora</TableHead>
-                      <TableHead className="text-right">Ações</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {transfers.map((transfer) => (
-                      <TableRow key={transfer.id} className="hover:bg-slate-50/50">
-                        <TableCell className="font-medium text-slate-900">
-                          {transfer.inventory_items?.name}
-                          <div className="text-[10px] text-slate-400">Qtd: {transfer.quantity}</div>
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-2 text-xs">
-                            <div className="flex flex-col">
-                              <span className="font-medium text-slate-700">{transfer.origin?.units?.name}</span>
-                              <span className="text-[10px] text-slate-400">{transfer.origin?.name}</span>
-                            </div>
-                            <ArrowRightLeft className="w-3 h-3 text-slate-300" />
-                            <div className="flex flex-col text-primary">
-                              <span className="font-medium">{transfer.destination?.units?.name}</span>
-                              <span className="text-[10px] opacity-70">{transfer.destination?.name}</span>
-                            </div>
-                          </div>
-                        </TableCell>
-                        <TableCell className="font-bold text-emerald-600">
-                          {transfer.freight_cost?.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                        </TableCell>
-                        <TableCell>{getStatusBadge(transfer.status)}</TableCell>
-                        <TableCell className="text-slate-500 text-xs">{transfer.carrier_name || "---"}</TableCell>
-                        <TableCell className="text-right">
-                          {transfer.status !== 'recebido' && (
-                            <Button variant="outline" size="sm" onClick={async () => {
-                              const { error } = await supabase
-                                .from("inventory_transfers")
-                                .update({ status: 'recebido', received_at: new Date().toISOString() })
-                                .eq("id", transfer.id);
-                              if (error) toast.error("Erro ao confirmar recebimento");
-                              else {
-                                queryClient.invalidateQueries({ queryKey: ["inventory_transfers"] });
-                                toast.success("Carga recebida com sucesso!");
-                              }
-                            }}>Receber</Button>
-                          )}
-                        </TableCell>
-                      </TableRow>
-                    ))}
                   </TableBody>
                 </Table>
               )}
