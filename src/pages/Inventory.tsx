@@ -17,7 +17,9 @@ import {
   ShieldCheck,
   Ship,
   Anchor,
-  ArrowRight
+  ArrowRight,
+  Printer,
+  Monitor
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -90,10 +92,28 @@ const Inventory = () => {
   const { data: transfers = [], isLoading: loadingTransfers } = useQuery({
     queryKey: ["inventory_transfers"],
     queryFn: async () => {
-      const { data, error } = await supabase
+      const { data, error } = await (supabase as any)
         .from("inventory_transfers")
         .select("*, inventory_items(name), origin:sectors!inventory_transfers_origin_sector_id_fkey(name, units(name)), destination:sectors!inventory_transfers_destination_sector_id_fkey(name, units(name))")
         .order("sent_at", { ascending: false });
+      if (error) throw error;
+      return data;
+    }
+  });
+
+  const { data: equipmentList = [] } = useQuery({
+    queryKey: ["equipment_list"],
+    queryFn: async () => {
+      const { data, error } = await (supabase as any).from("equipment").select("id, name, serial_number");
+      if (error) throw error;
+      return data;
+    }
+  });
+
+  const { data: stockLevels = [] } = useQuery({
+    queryKey: ["stock_levels"],
+    queryFn: async () => {
+      const { data, error } = await (supabase as any).from("stock_levels").select("*, sectors(name, units(name))");
       if (error) throw error;
       return data;
     }
@@ -130,6 +150,37 @@ const Inventory = () => {
 
   const updateTransferStatus = useMutation({
     mutationFn: async ({ id, status, updates = {} }: { id: string, status: string, updates?: any }) => {
+      if (status === 'recebido') {
+        // Fallback frontend logic since user doesn't have DB access to create RPCs
+        const { data: tData } = await (supabase as any).from("inventory_transfers").select("*").eq("id", id).single();
+        if (tData) {
+          if (tData.item_id) {
+            // Origin
+            const { data: originStock } = await (supabase as any).from("stock_levels").select("*").eq("item_id", tData.item_id).eq("sector_id", tData.origin_sector_id).maybeSingle();
+            if (originStock) {
+              await (supabase as any).from("stock_levels").update({ quantity: Math.max(0, originStock.quantity - tData.quantity) }).eq("id", originStock.id);
+            }
+            // Destination
+            const { data: destStock } = await (supabase as any).from("stock_levels").select("*").eq("item_id", tData.item_id).eq("sector_id", tData.destination_sector_id).maybeSingle();
+            if (destStock) {
+              await (supabase as any).from("stock_levels").update({ quantity: destStock.quantity + tData.quantity }).eq("id", destStock.id);
+            } else {
+              await (supabase as any).from("stock_levels").insert([{ item_id: tData.item_id, sector_id: tData.destination_sector_id, quantity: tData.quantity }]);
+            }
+          }
+          if (tData.notes && tData.notes.includes("equipment_id")) {
+            try {
+              const parsed = JSON.parse(tData.notes);
+              if (parsed.equipment_id) {
+                const { data: eq } = await (supabase as any).from("equipment").select("notes").eq("id", parsed.equipment_id).single();
+                if (eq) {
+                  await (supabase as any).from("equipment").update({ notes: (eq.notes || "") + " [Recebido via Logística]" }).eq("id", parsed.equipment_id);
+                }
+              }
+            } catch(e) {}
+          }
+        }
+      }
       const { data, error } = await supabase
         .from("inventory_transfers")
         .update({ status, ...updates })
@@ -139,10 +190,63 @@ const Inventory = () => {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["inventory_transfers"] });
+      queryClient.invalidateQueries({ queryKey: ["stock_levels"] });
       toast.success("Status atualizado!");
     },
     onError: (error) => toast.error(`Erro ao atualizar: ${error.message}`)
   });
+
+  const printReceipt = (t: any) => {
+    let equipName = null;
+    let equipSerial = "-";
+    if (t.notes && t.notes.includes("equipment_id")) {
+      try {
+        const parsed = JSON.parse(t.notes);
+        const eq = equipmentList.find((e: any) => e.id === parsed.equipment_id);
+        if (eq) { equipName = eq.name; equipSerial = eq.serial_number || "-"; }
+      } catch (e) {}
+    }
+    
+    const itemName = t.inventory_items?.name || equipName || "Item Indefinido";
+    const qty = equipName ? 1 : (t.quantity || 1);
+    
+    const content = `
+      <div style="font-family: sans-serif; padding: 20px; max-width: 600px; margin: auto; border: 1px solid #ccc;">
+        <h2 style="text-align: center;">GUIA DE REMESSA DE MATERIAL</h2>
+        <hr/>
+        <p><strong>Origem:</strong> ${t.origin?.units?.name} - ${t.origin?.name}</p>
+        <p><strong>Destino:</strong> ${t.destination?.units?.name} - ${t.destination?.name}</p>
+        <p><strong>Data de Envio:</strong> ${new Date(t.sent_at).toLocaleDateString()}</p>
+        <table style="width: 100%; border-collapse: collapse; margin-top: 20px;">
+          <tr>
+            <th style="border: 1px solid #ccc; padding: 8px;">Qtd</th>
+            <th style="border: 1px solid #ccc; padding: 8px;">Descrição do Item</th>
+            <th style="border: 1px solid #ccc; padding: 8px;">Série/SKU</th>
+          </tr>
+          <tr>
+            <td style="border: 1px solid #ccc; padding: 8px; text-align: center;">${qty}</td>
+            <td style="border: 1px solid #ccc; padding: 8px;">${itemName}</td>
+            <td style="border: 1px solid #ccc; padding: 8px;">${equipSerial}</td>
+          </tr>
+        </table>
+        <div style="margin-top: 30px;">
+          <p><strong>Logística:</strong> Embarcação ${t.vessel_name || '-'} / Porto: ${t.port_name || '-'}</p>
+          <p><strong>Valor do Frete:</strong> R$ ${t.freight_cost || '0.00'}</p>
+        </div>
+        <div style="margin-top: 60px; text-align: center;">
+          <p>_________________________________________________</p>
+          <p>Assinatura do Transportador / Responsável</p>
+        </div>
+      </div>
+    `;
+    const printWindow = window.open('', '', 'width=800,height=600');
+    if (printWindow) {
+      printWindow.document.write(content);
+      printWindow.document.close();
+      printWindow.focus();
+      printWindow.print();
+    }
+  };
 
   const getStatusBadge = (status: string) => {
     switch (status) {
@@ -303,22 +407,44 @@ const Inventory = () => {
               <form onSubmit={(e) => {
                 e.preventDefault();
                 const formData = new FormData(e.currentTarget);
+                const itemId = formData.get("item_id");
+                const equipId = formData.get("equipment_id");
+                
+                if (itemId === "none" && equipId === "none") {
+                  toast.error("Selecione um material ou um patrimônio!");
+                  return;
+                }
+
                 addTransferMutation.mutate({
-                  item_id: formData.get("item_id"),
+                  item_id: itemId !== "none" ? itemId : null,
+                  notes: equipId !== "none" ? JSON.stringify({ equipment_id: equipId }) : null,
                   origin_sector_id: formData.get("origin_sector_id"),
                   destination_sector_id: formData.get("destination_sector_id"),
-                  quantity: parseInt(formData.get("quantity") as string),
-                  status: "aguardando_aprovacao" // Inicia aguardando aprovação
+                  quantity: equipId !== "none" ? 1 : parseInt(formData.get("quantity") as string),
+                  status: "aguardando_aprovacao"
                 });
               }} className="space-y-4 py-4">
                 <div className="space-y-2">
-                  <Label>Item Solicitado</Label>
-                  <Select name="item_id" required>
+                  <Label>Item Solicitado (Estoque Quantitativo)</Label>
+                  <Select name="item_id">
                     <SelectTrigger>
-                      <SelectValue placeholder="Escolha o item" />
+                      <SelectValue placeholder="Escolha o material de estoque" />
                     </SelectTrigger>
                     <SelectContent>
+                      <SelectItem value="none">-- Nenhum (Usar Patrimônio) --</SelectItem>
                       {inventory.map(i => <SelectItem key={i.id} value={i.id}>{i.name}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>OU Patrimônio Específico (Opcional)</Label>
+                  <Select name="equipment_id">
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecione um patrimônio (se houver)" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">-- Nenhum --</SelectItem>
+                      {equipmentList.map(eq => <SelectItem key={eq.id} value={eq.id}>{eq.name} ({eq.serial_number || 'Sem série'})</SelectItem>)}
                     </SelectContent>
                   </Select>
                 </div>
@@ -451,7 +577,12 @@ const Inventory = () => {
                   <Card key={t.id} className="border-l-4 border-l-amber-400 shadow-sm hover:shadow-md transition-all">
                     <CardContent className="p-4 space-y-3">
                       <div className="flex justify-between items-start">
-                        <span className="font-bold text-slate-900">{t.inventory_items?.name}</span>
+                        <span className="font-bold text-slate-900">
+                          {t.notes && t.notes.includes("equipment_id") ? <Monitor className="inline w-4 h-4 mr-1 text-primary"/> : null}
+                          {t.inventory_items?.name || (t.notes && t.notes.includes("equipment_id") ? (() => {
+                            try { return equipmentList.find((e:any) => e.id === JSON.parse(t.notes).equipment_id)?.name; } catch(e) { return 'Patrimônio'; }
+                          })() : 'Item')}
+                        </span>
                         <span className="text-xs bg-slate-100 px-2 py-1 rounded">Qtd: {t.quantity}</span>
                       </div>
                       <div className="text-xs text-slate-500 flex items-center gap-1">
@@ -481,13 +612,25 @@ const Inventory = () => {
                   <Card key={t.id} className="border-l-4 border-l-purple-400 shadow-sm">
                     <CardContent className="p-4 space-y-3">
                       <div className="flex justify-between items-start">
-                        <span className="font-bold text-slate-900">{t.inventory_items?.name}</span>
+                        <span className="font-bold text-slate-900">
+                          {t.notes && t.notes.includes("equipment_id") ? <Monitor className="inline w-4 h-4 mr-1 text-primary"/> : null}
+                          {t.inventory_items?.name || (t.notes && t.notes.includes("equipment_id") ? (() => {
+                            try { return equipmentList.find((e:any) => e.id === JSON.parse(t.notes).equipment_id)?.name; } catch(e) { return 'Patrimônio'; }
+                          })() : 'Item')}
+                        </span>
                         <Badge variant="outline" className="text-[10px] text-emerald-600 border-emerald-200">Aprovado</Badge>
                       </div>
                       <Dialog>
-                        <DialogTrigger asChild>
-                          <Button size="sm" variant="outline" className="w-full h-8 text-xs"><Ship className="w-3 h-3 mr-1" /> Definir Porto & Frete</Button>
-                        </DialogTrigger>
+                        <div className="flex gap-2">
+                          <Button size="sm" variant="outline" className="flex-1 h-8 text-xs" onClick={() => printReceipt(t)}>
+                            <Printer className="w-3 h-3 mr-1" /> Guia
+                          </Button>
+                          <DialogTrigger asChild>
+                            <Button size="sm" className="flex-2 h-8 text-xs bg-slate-800 hover:bg-slate-900 text-white">
+                              <Ship className="w-3 h-3 mr-1" /> Logística
+                            </Button>
+                          </DialogTrigger>
+                        </div>
                         <DialogContent>
                           <DialogHeader><DialogTitle>Detalhes da Logística</DialogTitle></DialogHeader>
                           <form onSubmit={(e) => {
@@ -542,7 +685,12 @@ const Inventory = () => {
                   <Card key={t.id} className="border-l-4 border-l-blue-400 shadow-sm bg-blue-50/20">
                     <CardContent className="p-4 space-y-3">
                       <div className="flex justify-between items-start">
-                        <span className="font-bold text-slate-900">{t.inventory_items?.name}</span>
+                        <span className="font-bold text-slate-900">
+                          {t.notes && t.notes.includes("equipment_id") ? <Monitor className="inline w-4 h-4 mr-1 text-primary"/> : null}
+                          {t.inventory_items?.name || (t.notes && t.notes.includes("equipment_id") ? (() => {
+                            try { return equipmentList.find((e:any) => e.id === JSON.parse(t.notes).equipment_id)?.name; } catch(e) { return 'Patrimônio'; }
+                          })() : 'Item')}
+                        </span>
                         <div className="text-right">
                           <p className="text-[10px] font-bold text-emerald-600">Frete: R$ {t.freight_cost}</p>
                         </div>
@@ -552,7 +700,14 @@ const Inventory = () => {
                         <p className="flex justify-between"><span>Porto:</span> <span className="font-bold">{t.port_name}</span></p>
                         <p className="flex justify-between"><span>Destino:</span> <span className="font-bold text-primary">{t.destination?.units?.municipality}</span></p>
                       </div>
-                      <Button size="sm" className="w-full bg-slate-800 hover:bg-slate-900 h-8 text-xs" onClick={() => updateTransferStatus.mutate({ id: t.id, status: 'recebido', updates: { received_at: new Date().toISOString() } })}>Confirmar Recebimento</Button>
+                      <div className="flex gap-2">
+                        <Button size="sm" variant="outline" className="flex-1 h-8 text-xs bg-white hover:bg-slate-50" onClick={() => printReceipt(t)}>
+                          <Printer className="w-3 h-3" />
+                        </Button>
+                        <Button size="sm" className="flex-[3] bg-slate-800 hover:bg-slate-900 h-8 text-xs" onClick={() => updateTransferStatus.mutate({ id: t.id, status: 'recebido' })}>
+                          Confirmar Recebimento
+                        </Button>
+                      </div>
                     </CardContent>
                   </Card>
                 ))}
@@ -590,20 +745,39 @@ const Inventory = () => {
                       <TableHead>Material</TableHead>
                       <TableHead>Categoria</TableHead>
                       <TableHead>SKU</TableHead>
+                      <TableHead className="text-right">Saldos</TableHead>
                       <TableHead className="text-right">Ações</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {inventory.filter(i => i.name.toLowerCase().includes(searchTerm.toLowerCase())).map((item) => (
+                    {inventory.filter(i => i.name.toLowerCase().includes(searchTerm.toLowerCase())).map((item) => {
+                      const itemBalances = stockLevels.filter(s => s.item_id === item.id);
+                      const totalStock = itemBalances.reduce((acc, curr) => acc + curr.quantity, 0);
+                      
+                      return (
                       <TableRow key={item.id} className="hover:bg-slate-50/50">
                         <TableCell className="font-medium text-slate-900">{item.name}</TableCell>
                         <TableCell><Badge variant="outline" className="font-normal">{item.category}</Badge></TableCell>
                         <TableCell className="text-slate-500 font-mono text-xs">{item.sku || "---"}</TableCell>
                         <TableCell className="text-right">
+                          {totalStock > 0 ? (
+                            <div className="text-xs">
+                              <span className="font-bold text-emerald-600">{totalStock} em estoque</span>
+                              {itemBalances.map(b => (
+                                <div key={b.id} className="text-slate-500 text-[10px] mt-0.5">
+                                  {b.sectors?.units?.name}: {b.quantity}
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <span className="text-xs text-rose-500 font-medium">Sem Estoque</span>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-right">
                           <Button variant="ghost" size="sm">Editar</Button>
                         </TableCell>
                       </TableRow>
-                    ))}
+                    )})}
                     {inventory.length === 0 && (
                       <TableRow>
                         <TableCell colSpan={4} className="text-center py-8 text-slate-500">Nenhum item cadastrado.</TableCell>
