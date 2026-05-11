@@ -19,7 +19,8 @@ import {
   Anchor,
   ArrowRight,
   Printer,
-  Monitor
+  Monitor,
+  History
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -562,6 +563,9 @@ const Inventory = () => {
           <TabsTrigger value="units" className="data-[state=active]:bg-primary data-[state=active]:text-white px-6">
             <Building2 className="w-4 h-4 mr-2" /> Unidades e Setores
           </TabsTrigger>
+          <TabsTrigger value="historico" className="data-[state=active]:bg-primary data-[state=active]:text-white px-6">
+            <History className="w-4 h-4 mr-2" /> Histórico
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="workflow" className="space-y-6">
@@ -786,6 +790,62 @@ const Inventory = () => {
                   </TableBody>
                 </Table>
               )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="historico" className="mt-6">
+          <Card className="border-none shadow-sm">
+            <CardHeader>
+              <CardTitle className="text-xl">Histórico de Movimentações</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="rounded-md border bg-white">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Data/Hora</TableHead>
+                      <TableHead>Item / Patrimônio</TableHead>
+                      <TableHead>Origem</TableHead>
+                      <TableHead>Destino</TableHead>
+                      <TableHead>Logística</TableHead>
+                      <TableHead className="text-right">Status</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {transfers.filter((t: any) => t.status === 'recebido' || t.status === 'cancelado').length > 0 ? (
+                      transfers.filter((t: any) => t.status === 'recebido' || t.status === 'cancelado').map((t: any) => (
+                        <TableRow key={t.id} className="hover:bg-slate-50/50">
+                          <TableCell className="text-xs text-slate-500">
+                            {new Date(t.updated_at).toLocaleString()}
+                          </TableCell>
+                          <TableCell className="font-medium text-slate-900">
+                            {t.notes && t.notes.includes("equipment_id") ? <Monitor className="inline w-3 h-3 mr-1 text-primary"/> : null}
+                            {t.inventory_items?.name || (t.notes && t.notes.includes("equipment_id") ? (() => {
+                              try { return equipmentList.find((e:any) => e.id === JSON.parse(t.notes).equipment_id)?.name; } catch(e) { return 'Patrimônio'; }
+                            })() : 'Item')}
+                            <span className="ml-2 text-xs text-slate-500">(Qtd: {t.quantity})</span>
+                          </TableCell>
+                          <TableCell className="text-xs">{t.origin?.units?.name} - {t.origin?.name}</TableCell>
+                          <TableCell className="text-xs">{t.destination?.units?.name} - {t.destination?.name}</TableCell>
+                          <TableCell className="text-xs text-slate-500">
+                            {t.vessel_name ? `Embarcação: ${t.vessel_name}` : '-'}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <Badge variant={t.status === 'recebido' ? 'default' : 'destructive'}>{t.status}</Badge>
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    ) : (
+                      <TableRow>
+                        <TableCell colSpan={6} className="text-center py-8 text-slate-500">
+                          Nenhum histórico encontrado.
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
             </CardContent>
           </Card>
         </TabsContent>
