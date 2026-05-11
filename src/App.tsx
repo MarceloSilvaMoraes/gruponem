@@ -26,6 +26,7 @@ import Relatorios from "./pages/Relatorios.tsx";
 import Orcamentos from "./pages/Orcamentos.tsx";
 import Agenda from "./pages/Agenda.tsx";
 import Inventory from "./pages/Inventory.tsx";
+import SetupDB from "./pages/SetupDB.tsx";
 
 const queryClient = new QueryClient();
 
@@ -39,6 +40,7 @@ const App = () => (
           <AuthProvider>
             <Routes>
               <Route path="/auth" element={<Auth />} />
+              <Route path="/setup-db" element={<SetupDB />} />
               <Route
                 path="/meus-chamados"
                 element={
