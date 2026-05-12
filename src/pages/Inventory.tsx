@@ -66,6 +66,7 @@ const Inventory = () => {
   const [isNeedsModalOpen, setIsNeedsModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<any>(null);
   const [stockItem, setStockItem] = useState<any>(null);
+  const [prefillNeed, setPrefillNeed] = useState<any>(null);
 
   // Queries para buscar dados reais do banco
   const { data: units = [] } = useQuery({
@@ -245,6 +246,15 @@ const Inventory = () => {
                 if (eq) {
                   await (supabase as any).from("equipment").update({ notes: (eq.notes || "") + " [Recebido via Logística]" }).eq("id", parsed.equipment_id);
                 }
+              }
+            } catch(e) {}
+          }
+          // Automatic resolution of needs
+          if (tData.notes && tData.notes.includes("need_id")) {
+            try {
+              const parsed = JSON.parse(tData.notes);
+              if (parsed.need_id) {
+                await supabase.from("needs_requests").update({ status: 'resolvido' }).eq("id", parsed.need_id);
               }
             } catch(e) {}
           }
@@ -516,7 +526,10 @@ const Inventory = () => {
             </DialogContent>
           </Dialog>
 
-          <Dialog open={isTransferModalOpen} onOpenChange={setIsTransferModalOpen}>
+          <Dialog open={isTransferModalOpen} onOpenChange={(open) => {
+            setIsTransferModalOpen(open);
+            if (!open) setPrefillNeed(null);
+          }}>
             <DialogTrigger asChild>
               <Button variant="outline">
                 <ArrowRightLeft className="w-4 h-4 mr-2" /> Nova Solicitação
@@ -524,7 +537,7 @@ const Inventory = () => {
             </DialogTrigger>
             <DialogContent className="max-w-md">
               <DialogHeader>
-                <DialogTitle>Solicitar Envio de Material</DialogTitle>
+                <DialogTitle>{prefillNeed ? `Atender Necessidade: ${prefillNeed.item_description}` : "Solicitar Envio de Material"}</DialogTitle>
                 <DialogDescription>Inicie o fluxo de envio para uma unidade/setor.</DialogDescription>
               </DialogHeader>
               <form onSubmit={(e) => {
@@ -538,9 +551,13 @@ const Inventory = () => {
                   return;
                 }
 
+                const notes: any = {};
+                if (equipId !== "none") notes.equipment_id = equipId;
+                if (prefillNeed) notes.need_id = prefillNeed.id;
+
                 addTransferMutation.mutate({
                   item_id: itemId !== "none" ? itemId : null,
-                  notes: equipId !== "none" ? JSON.stringify({ equipment_id: equipId }) : null,
+                  notes: Object.keys(notes).length > 0 ? JSON.stringify(notes) : null,
                   origin_sector_id: formData.get("origin_sector_id"),
                   destination_sector_id: formData.get("destination_sector_id"),
                   quantity: equipId !== "none" ? 1 : parseInt(formData.get("quantity") as string),
@@ -585,7 +602,7 @@ const Inventory = () => {
                   </div>
                   <div className="space-y-2">
                     <Label>Para (Destino)</Label>
-                    <Select name="destination_sector_id" required>
+                    <Select name="destination_sector_id" defaultValue={prefillNeed?.sector_id} required>
                       <SelectTrigger>
                         <SelectValue placeholder="Destino" />
                       </SelectTrigger>
@@ -976,14 +993,27 @@ const Inventory = () => {
                       </TableCell>
                       <TableCell className="text-right">
                         {n.status === 'pendente' && (
-                          <Button 
-                            variant="outline" 
-                            size="sm" 
-                            className="text-emerald-600 border-emerald-200 hover:bg-emerald-50"
-                            onClick={() => updateNeedStatus.mutate({ id: n.id, status: 'resolvido' })}
-                          >
-                            Marcar Resolvido
-                          </Button>
+                          <div className="flex justify-end gap-1">
+                            <Button 
+                              variant="outline" 
+                              size="sm" 
+                              className="text-blue-600 border-blue-200 hover:bg-blue-50"
+                              onClick={() => {
+                                setPrefillNeed(n);
+                                setIsTransferModalOpen(true);
+                              }}
+                            >
+                              <Truck className="w-3 h-3 mr-1" /> Atender via Envio
+                            </Button>
+                            <Button 
+                              variant="outline" 
+                              size="sm" 
+                              className="text-emerald-600 border-emerald-200 hover:bg-emerald-50"
+                              onClick={() => updateNeedStatus.mutate({ id: n.id, status: 'resolvido' })}
+                            >
+                              Marcar Resolvido
+                            </Button>
+                          </div>
                         )}
                       </TableCell>
                     </TableRow>
