@@ -20,7 +20,9 @@ import {
   ArrowRight,
   Printer,
   Monitor,
-  History
+  History,
+  ShoppingCart,
+  MessageSquareWarning
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -61,6 +63,7 @@ const Inventory = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [isItemModalOpen, setIsItemModalOpen] = useState(false);
   const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
+  const [isNeedsModalOpen, setIsNeedsModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<any>(null);
   const [stockItem, setStockItem] = useState<any>(null);
 
@@ -117,6 +120,18 @@ const Inventory = () => {
     queryKey: ["stock_levels"],
     queryFn: async () => {
       const { data, error } = await (supabase as any).from("stock_levels").select("*, sectors(name, units(name))");
+      if (error) throw error;
+      return data;
+    }
+  });
+
+  const { data: needsRequests = [] } = useQuery({
+    queryKey: ["needs_requests"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("needs_requests")
+        .select("*, units(name), sectors(name)")
+        .order("created_at", { ascending: false });
       if (error) throw error;
       return data;
     }
@@ -248,6 +263,33 @@ const Inventory = () => {
       toast.success("Status atualizado!");
     },
     onError: (error) => toast.error(`Erro ao atualizar: ${error.message}`)
+  });
+
+  const addNeedMutation = useMutation({
+    mutationFn: async (need: any) => {
+      const { data, error } = await supabase.from("needs_requests").insert([need]).select();
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["needs_requests"] });
+      toast.success("Necessidade registrada com sucesso!");
+      setIsNeedsModalOpen(false);
+    },
+    onError: (error) => toast.error(`Erro ao registrar: ${error.message}`)
+  });
+
+  const updateNeedStatus = useMutation({
+    mutationFn: async ({ id, status }: { id: string, status: string }) => {
+      const { data, error } = await supabase.from("needs_requests").update({ status }).eq("id", id);
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["needs_requests"] });
+      toast.success("Status atualizado!");
+    },
+    onError: (error) => toast.error(`Erro ao atualizar status: ${error.message}`)
   });
 
   const printReceipt = (t: any) => {
@@ -569,7 +611,22 @@ const Inventory = () => {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4">
+        <Card className="border-none shadow-sm group">
+          <CardContent className="p-6 text-rose-600 bg-rose-50/30">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-rose-500">Itens em Falta</p>
+                <h3 className="text-2xl font-bold mt-1">
+                  {needsRequests.filter((n: any) => n.status === 'pendente').length}
+                </h3>
+              </div>
+              <div className="p-3 rounded-xl bg-rose-100 text-rose-600">
+                <ShoppingCart className="w-6 h-6" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
         <Card className="border-none shadow-sm group">
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
@@ -636,6 +693,9 @@ const Inventory = () => {
         <TabsList className="bg-white border p-1 shadow-sm h-12">
           <TabsTrigger value="workflow" className="data-[state=active]:bg-primary data-[state=active]:text-white px-6">
             <ArrowRightLeft className="w-4 h-4 mr-2" /> Fluxo de Envio
+          </TabsTrigger>
+          <TabsTrigger value="needs" className="data-[state=active]:bg-primary data-[state=active]:text-white px-6">
+            <MessageSquareWarning className="w-4 h-4 mr-2" /> Necessidades
           </TabsTrigger>
           <TabsTrigger value="inventory" className="data-[state=active]:bg-primary data-[state=active]:text-white px-6">
             <Package className="w-4 h-4 mr-2" /> Catálogo Geral
@@ -801,6 +861,142 @@ const Inventory = () => {
               </div>
             </div>
           </div>
+        </TabsContent>
+
+        <TabsContent value="needs" className="mt-6">
+          <Card className="border-none shadow-sm">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
+              <div>
+                <CardTitle className="text-lg font-bold">Materiais em Falta / Necessidades</CardTitle>
+                <p className="text-sm text-slate-500">Relatórios de itens essenciais que não temos no estoque atual.</p>
+              </div>
+              <Dialog open={isNeedsModalOpen} onOpenChange={setIsNeedsModalOpen}>
+                <DialogTrigger asChild>
+                  <Button className="bg-rose-600 hover:bg-rose-700">
+                    <Plus className="w-4 h-4 mr-2" /> Relatar Falta de Material
+                  </Button>
+                </DialogTrigger>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>Relatar Material em Falta</DialogTitle>
+                    <DialogDescription>Descreva o que está faltando e por que é necessário.</DialogDescription>
+                  </DialogHeader>
+                  <form onSubmit={(e) => {
+                    e.preventDefault();
+                    const formData = new FormData(e.currentTarget);
+                    addNeedMutation.mutate({
+                      item_description: formData.get("item_description"),
+                      unit_id: formData.get("unit_id"),
+                      sector_id: formData.get("sector_id"),
+                      urgency: formData.get("urgency"),
+                      reason: formData.get("reason"),
+                      status: "pendente"
+                    });
+                  }} className="space-y-4 py-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="item_description">O que está faltando?</Label>
+                      <Input id="item_description" name="item_description" placeholder="Ex: Projetor / Data-show" required />
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label>Unidade</Label>
+                        <Select name="unit_id" required>
+                          <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
+                          <SelectContent>
+                            {units.map((u: any) => <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>)}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Setor</Label>
+                        <Select name="sector_id" required>
+                          <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
+                          <SelectContent>
+                            {sectors.map((s: any) => <SelectItem key={s.id} value={s.id}>{s.units?.name} - {s.name}</SelectItem>)}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Urgência</Label>
+                      <Select name="urgency" defaultValue="normal">
+                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="baixa">Baixa</SelectItem>
+                          <SelectItem value="normal">Normal</SelectItem>
+                          <SelectItem value="urgente">Urgente 🔥</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="reason">Motivo/Justificativa</Label>
+                      <Input id="reason" name="reason" placeholder="Ex: Necessário para reuniões com a prefeitura" required />
+                    </div>
+                    <DialogFooter>
+                      <Button type="submit" className="bg-rose-600 hover:bg-rose-700 text-white" disabled={addNeedMutation.isPending}>
+                        {addNeedMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                        Registrar Necessidade
+                      </Button>
+                    </DialogFooter>
+                  </form>
+                </DialogContent>
+              </Dialog>
+            </CardHeader>
+            <CardContent>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Material</TableHead>
+                    <TableHead>Unidade / Setor</TableHead>
+                    <TableHead>Urgência</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead className="text-right">Ações</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {needsRequests.map((n: any) => (
+                    <TableRow key={n.id}>
+                      <TableCell>
+                        <div className="font-medium">{n.item_description}</div>
+                        <div className="text-[10px] text-slate-400">{n.reason}</div>
+                      </TableCell>
+                      <TableCell className="text-xs">
+                        {n.units?.name} <br/>
+                        <span className="text-slate-400">{n.sectors?.name}</span>
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant={n.urgency === 'urgente' ? 'destructive' : 'outline'}>
+                          {n.urgency}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="secondary" className={n.status === 'resolvido' ? 'bg-emerald-100 text-emerald-700' : ''}>
+                          {n.status}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {n.status === 'pendente' && (
+                          <Button 
+                            variant="outline" 
+                            size="sm" 
+                            className="text-emerald-600 border-emerald-200 hover:bg-emerald-50"
+                            onClick={() => updateNeedStatus.mutate({ id: n.id, status: 'resolvido' })}
+                          >
+                            Marcar Resolvido
+                          </Button>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                  {needsRequests.length === 0 && (
+                    <TableRow>
+                      <TableCell colSpan={5} className="text-center py-8 text-slate-400">Nenhuma necessidade registrada.</TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
         </TabsContent>
 
         <TabsContent value="inventory" className="space-y-4">
