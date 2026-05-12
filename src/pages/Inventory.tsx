@@ -1032,13 +1032,17 @@ const Inventory = () => {
             <DialogTitle>Editar Material</DialogTitle>
             <DialogDescription>Altere as informações do item e ajuste o saldo atual.</DialogDescription>
           </DialogHeader>
-          {editingItem && (
-            <form onSubmit={(e) => {
-              e.preventDefault();
-              const formData = new FormData(e.currentTarget);
-              const qty = parseInt(formData.get("edit_quantity") as string);
-              const sectorId = formData.get("edit_sector_id") as string;
-              
+          {editingItem && (() => {
+            const editingStock = stockLevels.find((s: any) => s.item_id === editingItem.id);
+            const defaultSectorId = editingStock ? editingStock.sector_id : "";
+            const defaultQuantity = editingStock ? editingStock.quantity : "";
+
+            return (
+              <form onSubmit={(e) => {
+                e.preventDefault();
+                const formData = new FormData(e.currentTarget);
+                const qty = parseInt(formData.get("edit_quantity") as string);
+                const sectorId = formData.get("edit_sector_id") as string;
               updateItemMutation.mutate({
                 id: editingItem.id,
                 updates: {
@@ -1085,7 +1089,7 @@ const Inventory = () => {
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label htmlFor="edit_sector_id">Setor/Unidade</Label>
-                    <Select name="edit_sector_id">
+                    <Select name="edit_sector_id" defaultValue={defaultSectorId}>
                       <SelectTrigger>
                         <SelectValue placeholder="Onde está guardado?" />
                       </SelectTrigger>
@@ -1100,7 +1104,7 @@ const Inventory = () => {
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="edit_quantity">Quantidade Atual</Label>
-                    <Input id="edit_quantity" name="edit_quantity" type="number" min="0" placeholder="Saldo Final" />
+                    <Input id="edit_quantity" name="edit_quantity" type="number" min="0" defaultValue={defaultQuantity} placeholder="Saldo Final" />
                   </div>
                 </div>
                 <p className="text-[10px] text-slate-500 mt-1">Se preenchido, irá sobrescrever o saldo atual do item neste setor.</p>
@@ -1114,7 +1118,8 @@ const Inventory = () => {
                 </Button>
               </DialogFooter>
             </form>
-          )}
+            );
+          })()}
         </DialogContent>
       </Dialog>
     </div>
