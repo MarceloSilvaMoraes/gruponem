@@ -313,8 +313,16 @@ const Inventory = () => {
       } catch (e) {}
     }
     
-    const itemName = t.inventory_items?.name || equipName || "Item Indefinido";
-    const qty = equipName ? 1 : (t.quantity || 1);
+    const itemName = t.inventory_items?.name || (() => {
+      if (!t.notes) return "Item Indefinido";
+      try {
+        const parsed = JSON.parse(t.notes);
+        if (parsed.manual_item) return parsed.manual_item;
+        if (parsed.equipment_id) return equipmentList.find((e: any) => e.id === parsed.equipment_id)?.name || "Patrimônio";
+        return "Item Indefinido";
+      } catch (e) { return "Item Indefinido"; }
+    })();
+    const qty = (t.notes && t.notes.includes("equipment_id")) ? 1 : (t.quantity || 1);
     
     const content = `
       <div style="font-family: sans-serif; padding: 20px; max-width: 600px; margin: auto; border: 1px solid #ccc;">
@@ -545,14 +553,16 @@ const Inventory = () => {
                 const formData = new FormData(e.currentTarget);
                 const itemId = formData.get("item_id");
                 const equipId = formData.get("equipment_id");
+                const manualItem = formData.get("manual_item_name") as string;
                 
-                if (itemId === "none" && equipId === "none") {
-                  toast.error("Selecione um material ou um patrimônio!");
+                if (itemId === "none" && equipId === "none" && !manualItem) {
+                  toast.error("Selecione um material, um patrimônio ou digite o nome do item!");
                   return;
                 }
 
                 const notes: any = {};
                 if (equipId !== "none") notes.equipment_id = equipId;
+                if (manualItem) notes.manual_item = manualItem;
                 if (prefillNeed) notes.need_id = prefillNeed.id;
 
                 addTransferMutation.mutate({
@@ -587,6 +597,10 @@ const Inventory = () => {
                       {equipmentList.map(eq => <SelectItem key={eq.id} value={eq.id}>{eq.name} ({eq.serial_number || 'Sem série'})</SelectItem>)}
                     </SelectContent>
                   </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>OU Descrição Manual (Para itens fora do catálogo)</Label>
+                  <Input name="manual_item_name" defaultValue={prefillNeed?.item_description} placeholder="Ex: Câmera específica recém comprada" />
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
@@ -740,9 +754,15 @@ const Inventory = () => {
                       <div className="flex justify-between items-start">
                         <span className="font-bold text-slate-900">
                           {t.notes && t.notes.includes("equipment_id") ? <Monitor className="inline w-4 h-4 mr-1 text-primary"/> : null}
-                          {t.inventory_items?.name || (t.notes && t.notes.includes("equipment_id") ? (() => {
-                            try { return equipmentList.find((e:any) => e.id === JSON.parse(t.notes).equipment_id)?.name; } catch(e) { return 'Patrimônio'; }
-                          })() : 'Item')}
+                          {t.inventory_items?.name || (() => {
+                            if (!t.notes) return 'Item';
+                            try {
+                              const parsed = JSON.parse(t.notes);
+                              if (parsed.manual_item) return parsed.manual_item;
+                              if (parsed.equipment_id) return equipmentList.find((e:any) => e.id === parsed.equipment_id)?.name || 'Patrimônio';
+                              return 'Item';
+                            } catch(e) { return 'Item'; }
+                          })()}
                         </span>
                         <span className="text-xs bg-slate-100 px-2 py-1 rounded">Qtd: {t.quantity}</span>
                       </div>
@@ -775,9 +795,15 @@ const Inventory = () => {
                       <div className="flex justify-between items-start">
                         <span className="font-bold text-slate-900">
                           {t.notes && t.notes.includes("equipment_id") ? <Monitor className="inline w-4 h-4 mr-1 text-primary"/> : null}
-                          {t.inventory_items?.name || (t.notes && t.notes.includes("equipment_id") ? (() => {
-                            try { return equipmentList.find((e:any) => e.id === JSON.parse(t.notes).equipment_id)?.name; } catch(e) { return 'Patrimônio'; }
-                          })() : 'Item')}
+                          {t.inventory_items?.name || (() => {
+                            if (!t.notes) return 'Item';
+                            try {
+                              const parsed = JSON.parse(t.notes);
+                              if (parsed.manual_item) return parsed.manual_item;
+                              if (parsed.equipment_id) return equipmentList.find((e:any) => e.id === parsed.equipment_id)?.name || 'Patrimônio';
+                              return 'Item';
+                            } catch(e) { return 'Item'; }
+                          })()}
                         </span>
                         <Badge variant="outline" className="text-[10px] text-emerald-600 border-emerald-200">Aprovado</Badge>
                       </div>
@@ -848,9 +874,15 @@ const Inventory = () => {
                       <div className="flex justify-between items-start">
                         <span className="font-bold text-slate-900">
                           {t.notes && t.notes.includes("equipment_id") ? <Monitor className="inline w-4 h-4 mr-1 text-primary"/> : null}
-                          {t.inventory_items?.name || (t.notes && t.notes.includes("equipment_id") ? (() => {
-                            try { return equipmentList.find((e:any) => e.id === JSON.parse(t.notes).equipment_id)?.name; } catch(e) { return 'Patrimônio'; }
-                          })() : 'Item')}
+                          {t.inventory_items?.name || (() => {
+                            if (!t.notes) return 'Item';
+                            try {
+                              const parsed = JSON.parse(t.notes);
+                              if (parsed.manual_item) return parsed.manual_item;
+                              if (parsed.equipment_id) return equipmentList.find((e:any) => e.id === parsed.equipment_id)?.name || 'Patrimônio';
+                              return 'Item';
+                            } catch(e) { return 'Item'; }
+                          })()}
                         </span>
                         <div className="text-right">
                           <p className="text-[10px] font-bold text-emerald-600">Frete: R$ {t.freight_cost}</p>
