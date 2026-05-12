@@ -69,7 +69,33 @@ export default function Agenda() {
         const now = new Date();
         const results: any[] = [];
 
-        // 1. Buscar dos tickets (Onde o Typebot salva)
+        // 1. Buscar da tabela específica (bookings) - NOVO PADRÃO
+        const { data: dbBookings, error: bErr } = await supabase
+          .from("bookings")
+          .select(`*, environments(name)`)
+          .order("start_time", { ascending: true });
+
+        if (!bErr && dbBookings) {
+          dbBookings.forEach((b: any) => {
+            const start = new Date(b.start_time);
+            const end = new Date(b.end_time);
+            results.push({
+              id: b.id,
+              requester_name: b.requester_name,
+              requester_phone: b.requester_phone,
+              environment_name: b.environments?.name || "Ambiente",
+              start_time: b.start_time,
+              display_time: `${format(start, "HH:mm")} às ${format(end, "HH:mm")}`,
+              description: b.description,
+              status: b.status,
+              is_past: now > end,
+              is_ongoing: now >= start && now <= end,
+              source: "bookings"
+            });
+          });
+        }
+
+        // 2. Buscar dos tickets (Legado/Typebot Antigo)
         const { data: tickets, error: tErr } = await (supabase as any)
           .from("tickets")
           .select(`id, subject, description, category, created_at, status, contact:contacts(name, phone)`)
@@ -78,6 +104,9 @@ export default function Agenda() {
 
         if (!tErr && tickets) {
           tickets.forEach((t: any) => {
+            // Evitar duplicados se o ID já existir (improvável entre tabelas diferentes mas bom prevenir)
+            if (results.some(r => r.id === t.id)) return;
+
             let displayDate = new Date(t.created_at);
             let displayTime = "Horário não inf.";
             const dateMatch = t.subject.match(/(\d{1,2})\/(\d{1,2})/);
@@ -148,38 +177,22 @@ export default function Agenda() {
     }
 
     try {
-      // 1. Criar ou Vincular Contato (Necessário para a tabela tickets)
-      const phoneRaw = `dashboard-${newBooking.requester_name.toLowerCase().replace(/\s/g, "-")}`;
-      
-      const { data: contact, error: contactErr } = await supabase
-        .from("contacts")
-        .upsert({ 
-          phone: phoneRaw, 
-          name: newBooking.requester_name 
-        }, { onConflict: "phone" })
-        .select()
-        .single();
+      const startStr = `${newBooking.date}T${newBooking.start_time}:00`;
+      const endStr = `${newBooking.date}T${newBooking.end_time}:00`;
 
-      if (contactErr) throw contactErr;
-
-      // 2. Criar o Ticket de Agendamento
-      const [year, month, day] = newBooking.date.split("-");
-      const formattedDate = `${day}/${month}`;
-      const subject = `[AGENDA] ${newBooking.environment_name} - ${formattedDate} das ${newBooking.start_time} às ${newBooking.end_time}`;
-
-      const { error: ticketErr } = await (supabase as any)
-        .from("tickets")
+      const { error: bookingErr } = await supabase
+        .from("bookings")
         .insert({
-          contact_id: contact.id,
-          subject,
-          description: newBooking.reason || "Agendamento manual via Dashboard",
-          category: "booking",
-          status: "closed",
-          priority: "medium",
-          source: "dashboard"
+          environment_id: newBooking.environment_id,
+          requester_name: newBooking.requester_name,
+          requester_phone: "dashboard",
+          start_time: new Date(startStr).toISOString(),
+          end_time: new Date(endStr).toISOString(),
+          description: newBooking.reason,
+          status: "confirmed"
         });
 
-      if (ticketErr) throw ticketErr;
+      if (bookingErr) throw bookingErr;
 
       toast.success("Agendamento criado com sucesso!");
       setIsCreateModalOpen(false);
@@ -207,16 +220,14 @@ export default function Agenda() {
     }
 
     try {
-      // 1. Reconstruir o Subject
-      const [year, month, day] = editForm.date.split("-");
-      const formattedDate = `${day}/${month}`;
-      const subject = `[AGENDA] ${editForm.environment_name} - ${formattedDate} das ${editForm.start_time} às ${editForm.end_time}`;
+      const startStr = `${editForm.date}T${editForm.start_time}:00`;
+      const endStr = `${editForm.date}T${editForm.end_time}:00`;
 
-      // 2. Atualizar o Ticket
-      const { error } = await (supabase as any)
-        .from("tickets")
+      const { error } = await supabase
+        .from("bookings")
         .update({
-          subject,
+          start_time: new Date(startStr).toISOString(),
+          end_time: new Date(endStr).toISOString(),
           description: editForm.reason
         })
         .eq("id", editForm.id);
@@ -257,9 +268,12 @@ export default function Agenda() {
   };
 
   const confirmBooking = async (booking: any) => {
+    const table = booking.source === "tickets" ? "tickets" : "bookings";
+    const updateData = booking.source === "tickets" ? { status: "closed" } : { status: "confirmed" };
+
     const { error } = await (supabase as any)
-      .from("tickets")
-      .update({ status: "closed" })
+      .from(table)
+      .update(updateData)
       .eq("id", booking.id);
     
     if (error) toast.error("Erro ao confirmar");
@@ -271,8 +285,10 @@ export default function Agenda() {
 
   const cancelBooking = async (booking: any) => {
     if (!confirm("Deseja realmente excluir esta reserva?")) return;
+    const table = booking.source === "tickets" ? "tickets" : "bookings";
+
     const { error } = await (supabase as any)
-      .from("tickets")
+      .from(table)
       .delete()
       .eq("id", booking.id);
     

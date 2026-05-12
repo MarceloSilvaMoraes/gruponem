@@ -75,30 +75,67 @@ serve(async (req) => {
       const newStart = parseTimeToNumber(start_time);
       const newEnd = parseTimeToNumber(end_time || (newStart + 1).toString());
 
-      // Buscar agendamentos existentes
-      const { data: tickets, error } = await supabase
-        .from('tickets')
-        .select('subject')
-        .or(`category.eq.booking,subject.ilike.[AGENDA]%`)
-        .ilike('subject', `%${environment_name}%`)
-        .ilike('subject', `%${date}%`);
+      // Buscar o ambiente pelo nome
+      const { data: env } = await supabase
+        .from('environments')
+        .select('id')
+        .ilike('name', `%${environment_name}%`)
+        .single();
+
+      if (!env) {
+        return json({ available: false, message: "Ambiente não encontrado" });
+      }
+
+      // Buscar agendamentos na tabela correta (bookings)
+      const { data: bookings, error } = await supabase
+        .from('bookings')
+        .select('start_time, end_time')
+        .eq('environment_id', env.id)
+        .neq('status', 'cancelled');
 
       if (error) throw error;
 
-      let conflictFound = false;
-      tickets?.forEach((t: any) => {
-        const rangeMatch = t.subject.match(/(\d{1,2}[:h]\d{2}|\d{1,2}h)\s*(?:as|às|-|to)\s*(\d{1,2}[:h]\d{2}|\d{1,2}h)/i);
-        const singleMatch = t.subject.match(/(\d{1,2}[:h]\d{2})|(\d{1,2}h)/i);
-        let existingStart = 0;
-        let existingEnd = 0;
-
-        if (rangeMatch) {
-          existingStart = parseTimeToNumber(rangeMatch[1]);
-          existingEnd = parseTimeToNumber(rangeMatch[2]);
-        } else if (singleMatch) {
-          existingStart = parseTimeToNumber(singleMatch[0]);
-          existingEnd = existingStart + 1;
+      // Função Universal de Normalização
+      const normalizeDateTime = (dStr: string, tStr: string) => {
+        if (!dStr || !tStr) return null;
+        
+        // 1. Normalizar Data
+        let datePart = dStr.trim().replace(/\//g, '-');
+        if (datePart.match(/^\d{1,2}-\d{1,2}$/)) { // Formato DD-MM
+          datePart = `${new Date().getFullYear()}-${datePart.split('-')[1].padStart(2, '0')}-${datePart.split('-')[0].padStart(2, '0')}`;
+        } else if (datePart.match(/^\d{1,2}-\d{1,2}-\d{4}$/)) { // Formato DD-MM-YYYY
+          const [d, m, y] = datePart.split('-');
+          datePart = `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
         }
+        
+        // 2. Normalizar Hora
+        let timePart = tStr.trim().toLowerCase().replace('h', ':').replace(' ', '');
+        if (!timePart.includes(':')) timePart += ':00';
+        const parts = timePart.split(':');
+        const h = parts[0].padStart(2, '0');
+        const m = (parts[1] || '00').padEnd(2, '0').substring(0, 2);
+        timePart = `${h}:${m}:00`;
+
+        try {
+          const finalDate = new Date(`${datePart}T${timePart}`);
+          return isNaN(finalDate.getTime()) ? null : finalDate;
+        } catch { return null; }
+      };
+
+      const startDate = normalizeDateTime(date, start_time);
+      const endDate = normalizeDateTime(date, end_time || (startDate ? new Date(startDate.getTime() + 3600000).toISOString() : ""));
+
+      if (!startDate) {
+        return json({ available: false, message: "Formato de data ou hora inválido" });
+      }
+
+      const newStart = startDate.getTime();
+      const newEnd = endDate ? endDate.getTime() : newStart + 3600000;
+
+      let conflictFound = false;
+      bookings?.forEach((b: any) => {
+        const existingStart = new Date(b.start_time).getTime();
+        const existingEnd = new Date(b.end_time).getTime();
 
         if (existingStart < newEnd && existingEnd > newStart) {
           conflictFound = true;
@@ -212,6 +249,79 @@ serve(async (req) => {
       .order("created_at", { ascending: false })
       .limit(1)
       .maybeSingle();
+
+    if (category === "booking" || (body.subject && String(body.subject).includes("[AGENDA]"))) {
+      // 1. Localizar Ambiente com busca flexível
+      const envInput = (body.environment_name || body.sala || subject.split("-")[0].replace("[AGENDA]", "").trim());
+      const cleanInput = envInput.toLowerCase().replace(/\s/g, '').replace(/0(?=\d)/g, '');
+      
+      const { data: allEnvs } = await supabase.from('environments').select('id, name');
+      let env = allEnvs?.find(e => {
+        const dbClean = e.name.toLowerCase().replace(/\s/g, '').replace(/0(?=\d)/g, '');
+        return dbClean === cleanInput || e.name.toLowerCase().includes(envInput.toLowerCase());
+      });
+
+      // SE NÃO EXISTE, CRIA AUTOMATICAMENTE
+      if (!env) {
+        const { data: newEnv, error: createEnvErr } = await supabase
+          .from('environments')
+          .insert({ name: envInput.charAt(0).toUpperCase() + envInput.slice(1) })
+          .select('id, name')
+          .single();
+        
+        if (!createEnvErr) {
+          env = newEnv;
+        }
+      }
+
+      if (env) {
+        // 2. Extrair Datas do Subject ou campos
+        const dateStr = body.date || body.data;
+        const startTime = body.start_time || body.inicio;
+        const endTime = body.end_time || body.fim;
+
+        const normalizeToISO = (dStr: string, tStr: string) => {
+          if (!dStr || !tStr) return null;
+          let datePart = dStr.trim().replace(/\//g, '-');
+          if (datePart.match(/^\d{1,2}-\d{1,2}$/)) {
+            datePart = `${new Date().getFullYear()}-${datePart.split('-')[1].padStart(2, '0')}-${datePart.split('-')[0].padStart(2, '0')}`;
+          } else if (datePart.match(/^\d{1,2}-\d{1,2}-\d{4}$/)) {
+            const [d, m, y] = datePart.split('-');
+            datePart = `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
+          }
+          
+          let timePart = tStr.trim().toLowerCase().replace('h', ':').replace(' ', '');
+          if (!timePart.includes(':')) timePart += ':00';
+          const parts = timePart.split(':');
+          const h = parts[0].padStart(2, '0');
+          const m = (parts[1] || '00').padEnd(2, '0').substring(0, 2);
+          return `${datePart}T${h}:${m}:00`;
+        };
+
+        const startISO = normalizeToISO(dateStr, startTime);
+        const endISO = endTime ? normalizeToISO(dateStr, endTime) : (startISO ? new Date(new Date(startISO).getTime() + 3600000).toISOString() : null);
+
+        if (startISO && endISO) {
+          const { data: booking, error: bErr } = await supabase
+            .from("bookings")
+            .insert({
+              environment_id: env.id,
+              requester_name: name || "Desconhecido",
+              requester_phone: phoneRaw,
+              start_time: startISO,
+              end_time: endISO,
+              description: description,
+              status: "confirmed"
+            })
+            .select()
+            .single();
+
+          if (!bErr) {
+            return json({ ok: true, booking_id: booking.id, contact_id: contact.id });
+          }
+        }
+      }
+    }
 
     if (ticket) {
       // update with the new description so attendant sees the latest detail
