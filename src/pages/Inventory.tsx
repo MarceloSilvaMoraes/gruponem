@@ -86,7 +86,7 @@ const Inventory = () => {
   const { data: inventory = [], isLoading: loadingInventory } = useQuery({
     queryKey: ["inventory_items"],
     queryFn: async () => {
-      const { data, error } = await supabase.from("inventory_items").select("*");
+      const { data, error } = await supabase.from("inventory_items").select("*").order("name");
       if (error) throw error;
       return data;
     }
