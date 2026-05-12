@@ -59,56 +59,68 @@ serve(async (req) => {
       return json({ error: "Invalid JSON" }, 400);
     }
 
-    // ========= MODO NOVO: Checagem de Disponibilidade (Agenda) =========
+    // ========= MODO NOVO: Checagem de Disponibilidade (Agenda Real) =========
     if (body.action === "check" || body.event === "check_availability") {
-      const environment_name = body.environment_name || body.sala;
+      const envSearch = body.environment_name || body.sala || body.ambiente || body.local;
       const date = body.date || body.data;
-      const start_time = body.start_time || body.inicio;
-      const end_time = body.end_time || body.fim;
+      const startTime = body.start_time || body.inicio;
+      const endTime = body.end_time || body.fim;
 
-      const parseTimeToNumber = (timeStr: string) => {
-        if (!timeStr) return 0;
-        const [h, m] = timeStr.replace('h', ':').split(':').map(Number);
-        return h + (m || 0) / 60;
+      if (!envSearch || !date || !startTime) {
+        return json({ error: "Dados insuficientes (ambiente, data e início são necessários)" }, 400);
+      }
+
+      // 1. Achar o ambiente
+      const { data: env } = await supabase
+        .from("environments")
+        .select("id, name")
+        .ilike("name", `%${envSearch}%`)
+        .single();
+
+      if (!env) {
+        // Retorna lista de ambientes disponíveis para ajudar o usuário
+        const { data: allEnvs } = await supabase.from("environments").select("name").limit(5);
+        const options = allEnvs?.map(e => e.name).join(", ") || "Nenhum ambiente cadastrado";
+        return json({ 
+          available: false, 
+          ok: false, 
+          message: `Ambiente '${envSearch}' não encontrado. Disponíveis: ${options}` 
+        });
+      }
+
+      // 2. Formatar horários para comparação
+      const formatTime = (t: string) => {
+        let cleaned = t.toLowerCase().replace("h", ":");
+        if (!cleaned.includes(":")) cleaned += ":00";
+        const [h, m] = cleaned.split(":");
+        return `${h.padStart(2, '0')}:${(m || "00").padStart(2, '0')}`;
       };
 
-      const newStart = parseTimeToNumber(start_time);
-      const newEnd = parseTimeToNumber(end_time || (newStart + 1).toString());
+      const formattedDate = date.includes("/") 
+        ? date.split("/").reverse().join("-") 
+        : date;
 
-      // Buscar agendamentos existentes
-      const { data: tickets, error } = await supabase
-        .from('tickets')
-        .select('subject')
-        .or(`category.eq.booking,subject.ilike.[AGENDA]%`)
-        .ilike('subject', `%${environment_name}%`)
-        .ilike('subject', `%${date}%`);
+      const startISO = new Date(`${formattedDate}T${formatTime(startTime)}`).toISOString();
+      const endISO = endTime 
+        ? new Date(`${formattedDate}T${formatTime(endTime)}`).toISOString()
+        : new Date(new Date(startISO).getTime() + 60 * 60 * 1000).toISOString();
 
-      if (error) throw error;
+      // 3. Verificar conflitos na tabela de BOOKINGS
+      const { data: conflicts } = await supabase
+        .from("bookings")
+        .select("id")
+        .eq("environment_id", env.id)
+        .neq("status", "cancelled")
+        .filter("start_time", "lt", endISO)
+        .filter("end_time", "gt", startISO);
 
-      let conflictFound = false;
-      tickets?.forEach((t: any) => {
-        const rangeMatch = t.subject.match(/(\d{1,2}[:h]\d{2}|\d{1,2}h)\s*(?:as|às|-|to)\s*(\d{1,2}[:h]\d{2}|\d{1,2}h)/i);
-        const singleMatch = t.subject.match(/(\d{1,2}[:h]\d{2})|(\d{1,2}h)/i);
-        let existingStart = 0;
-        let existingEnd = 0;
-
-        if (rangeMatch) {
-          existingStart = parseTimeToNumber(rangeMatch[1]);
-          existingEnd = parseTimeToNumber(rangeMatch[2]);
-        } else if (singleMatch) {
-          existingStart = parseTimeToNumber(singleMatch[0]);
-          existingEnd = existingStart + 1;
-        }
-
-        if (existingStart < newEnd && existingEnd > newStart) {
-          conflictFound = true;
-        }
-      });
+      const isAvailable = !conflicts || conflicts.length === 0;
 
       return json({ 
-        available: !conflictFound, 
-        ok: !conflictFound,
-        message: conflictFound ? "Horário ocupado" : "Horário disponível" 
+        available: isAvailable, 
+        ok: isAvailable,
+        environment_id: env.id,
+        message: isAvailable ? "Horário disponível" : "Horário já ocupado" 
       });
     }
 
