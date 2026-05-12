@@ -551,26 +551,33 @@ const Inventory = () => {
               <form onSubmit={(e) => {
                 e.preventDefault();
                 const formData = new FormData(e.currentTarget);
-                const itemId = formData.get("item_id");
-                const equipId = formData.get("equipment_id");
+                const itemId = formData.get("item_id") as string;
+                const equipId = formData.get("equipment_id") as string;
                 const manualItem = formData.get("manual_item_name") as string;
+                const originId = formData.get("origin_sector_id") as string;
+                const destId = formData.get("destination_sector_id") as string;
                 
-                if (itemId === "none" && equipId === "none" && !manualItem) {
+                if ((!itemId || itemId === "none") && (!equipId || equipId === "none") && !manualItem) {
                   toast.error("Selecione um material, um patrimônio ou digite o nome do item!");
                   return;
                 }
 
+                if (!originId || originId === "none" || !destId || destId === "none") {
+                  toast.error("Selecione a origem e o destino!");
+                  return;
+                }
+
                 const notes: any = {};
-                if (equipId !== "none") notes.equipment_id = equipId;
+                if (equipId && equipId !== "none") notes.equipment_id = equipId;
                 if (manualItem) notes.manual_item = manualItem;
                 if (prefillNeed) notes.need_id = prefillNeed.id;
 
                 addTransferMutation.mutate({
-                  item_id: itemId !== "none" ? itemId : null,
+                  item_id: (itemId && itemId !== "none") ? itemId : null,
                   notes: Object.keys(notes).length > 0 ? JSON.stringify(notes) : null,
-                  origin_sector_id: formData.get("origin_sector_id"),
-                  destination_sector_id: formData.get("destination_sector_id"),
-                  quantity: equipId !== "none" ? 1 : parseInt(formData.get("quantity") as string),
+                  origin_sector_id: originId,
+                  destination_sector_id: destId,
+                  quantity: (equipId && equipId !== "none") ? 1 : parseInt(formData.get("quantity") as string),
                   status: "aguardando_aprovacao"
                 });
               }} className="space-y-4 py-4">
