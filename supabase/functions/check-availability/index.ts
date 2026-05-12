@@ -19,64 +19,82 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     )
 
-    // 1. Converter horários de entrada para números (ex: "08:30" -> 8.5)
-    const parseTimeToNumber = (timeStr: string) => {
-      const [h, m] = timeStr.replace('h', ':').split(':').map(Number)
-      return h + (m || 0) / 60
+    // 1. Normalização Universal de Data e Hora
+    const normalizeDateTime = (dStr: string, tStr: string) => {
+      if (!dStr || !tStr) return null;
+      let datePart = dStr.trim().replace(/\//g, '-');
+      if (datePart.match(/^\d{1,2}-\d{1,2}$/)) {
+        datePart = `${new Date().getFullYear()}-${datePart.split('-')[1].padStart(2, '0')}-${datePart.split('-')[0].padStart(2, '0')}`;
+      } else if (datePart.match(/^\d{1,2}-\d{1,2}-\d{4}$/)) {
+        const [d, m, y] = datePart.split('-');
+        datePart = `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
+      }
+      let timePart = tStr.trim().toLowerCase().replace('h', ':').replace(' ', '');
+      if (!timePart.includes(':')) timePart += ':00';
+      const parts = timePart.split(':');
+      const h = parts[0].padStart(2, '0');
+      const m = (parts[1] || '00').padEnd(2, '0').substring(0, 2);
+      timePart = `${h}:${m}:00`;
+      try {
+        const finalDate = new Date(`${datePart}T${timePart}`);
+        return isNaN(finalDate.getTime()) ? null : finalDate;
+      } catch { return null; }
+    };
+
+    const startReq = normalizeDateTime(date, start_time);
+    const endReq = normalizeDateTime(date, end_time);
+
+    if (!startReq || !endReq) {
+      return new Response(JSON.stringify({ esta_disponivel: false, error: "Formato de data inválido" }), { 
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+      });
     }
 
-    const newStart = parseTimeToNumber(start_time)
-    const newEnd = parseTimeToNumber(end_time)
+    const requestStart = startReq.getTime();
+    const requestEnd = endReq.getTime();
 
-    // 2. Buscar agendamentos existentes para essa sala e dia
-    // Buscamos na tabela de tickets (onde estão a maioria por enquanto)
-    const { data: tickets, error } = await supabase
-      .from('tickets')
-      .select('subject')
-      .or(`category.eq.booking,subject.ilike.[AGENDA]%`)
-      .ilike('subject', `%${environment_name}%`)
-      .ilike('subject', `%${date}%`)
+    // 2. Busca ultra-flexível do ambiente
+    // Removemos zeros à esquerda e espaços para comparar (ex: "Sala 01" vira "sala1")
+    const cleanName = environment_name.toLowerCase().replace(/\s/g, '').replace(/0(?=\d)/g, '');
+    
+    const { data: allEnvs } = await supabase.from('environments').select('id, name');
+    const env = allEnvs?.find(e => {
+      const dbCleanName = e.name.toLowerCase().replace(/\s/g, '').replace(/0(?=\d)/g, '');
+      return dbCleanName === cleanName || e.name.toLowerCase().includes(environment_name.toLowerCase());
+    });
 
-    if (error) throw error
+    // Se o ambiente não existe no sistema, tecnicamente ele está "disponível" para o bot continuar
+    if (!env) {
+      return new Response(JSON.stringify({ 
+        esta_disponivel: true, 
+        message: "Ambiente novo ou não localizado, prosseguindo..." 
+      }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
 
-    let conflictFound = false
-    let conflictingEvent = ""
+    // 3. Buscar agendamentos
+    const { data: dbBookings } = await supabase
+      .from('bookings')
+      .select('start_time, end_time')
+      .eq('environment_id', env.id)
+      .neq('status', 'cancelled');
 
-    tickets?.forEach((t: any) => {
-      // Tenta extrair o intervalo do título: "14:00 às 16:00" ou "14h - 16h"
-      const rangeMatch = t.subject.match(/(\d{1,2}[:h]\d{2}|\d{1,2}h)\s*(?:as|às|-|to)\s*(\d{1,2}[:h]\d{2}|\d{1,2}h)/i)
-      const singleMatch = t.subject.match(/(\d{1,2}[:h]\d{2})|(\d{1,2}h)/i)
-
-      let existingStart = 0
-      let existingEnd = 0
-
-      if (rangeMatch) {
-        existingStart = parseTimeToNumber(rangeMatch[1])
-        existingEnd = parseTimeToNumber(rangeMatch[2])
-      } else if (singleMatch) {
-        existingStart = parseTimeToNumber(singleMatch[0])
-        existingEnd = existingStart + 1 // Assume 1h se não tiver fim
-      }
-
-      // Lógica de Sobreposição: (Início1 < Fim2) E (Fim1 > Início2)
-      if (existingStart < newEnd && existingEnd > newStart) {
-        conflictFound = true
-        conflictingEvent = t.subject
-      }
-    })
+    let conflictFound = false;
+    dbBookings?.forEach((b: any) => {
+      const start = new Date(b.start_time).getTime();
+      const end = new Date(b.end_time).getTime();
+      if (start < requestEnd && end > requestStart) conflictFound = true;
+    });
 
     return new Response(
       JSON.stringify({ 
-        available: !conflictFound, 
-        conflict: conflictFound ? conflictingEvent : null,
+        esta_disponivel: !conflictFound,
         message: conflictFound ? "Horário ocupado" : "Horário disponível"
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
 
   } catch (error) {
-    return new Response(JSON.stringify({ error: error.message }), {
-      status: 400,
+    return new Response(JSON.stringify({ esta_disponivel: false, error: error.message }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     })
   }
