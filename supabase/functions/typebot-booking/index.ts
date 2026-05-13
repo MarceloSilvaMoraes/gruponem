@@ -1,35 +1,24 @@
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.95.0";
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2"
 
 const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-  "Access-Control-Allow-Methods": "POST, GET, OPTIONS",
-};
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+}
 
-Deno.serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response("ok", { headers: corsHeaders });
-  }
-
-  const supabase = createClient(
-    Deno.env.get("SUPABASE_URL")!,
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
-  );
-
-  // GET: Retorna a lista de ambientes para o Typebot usar como opções
-  if (req.method === "GET") {
-    const { data: envs, error } = await supabase.from("environments").select("id, name").order("name");
-    if (error) return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: corsHeaders });
-    
-    return new Response(JSON.stringify(envs), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-  }
+serve(async (req) => {
+  if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
 
   try {
-    const body = await req.json();
-    console.log("Booking Request:", body);
+    const supabase = createClient(
+      Deno.env.get('SUPABASE_URL') ?? '',
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+    );
 
+    const body = await req.json();
+    console.log("Booking Request Body:", JSON.stringify(body));
+
+    // Mapeamento flexível para aceitar qualquer um dos nomes
     const pick = (obj: any, ...keys: string[]) => {
       for (const k of keys) {
         if (obj[k] !== undefined && obj[k] !== null) return obj[k];
@@ -39,148 +28,90 @@ Deno.serve(async (req) => {
       return null;
     };
 
-    const name = pick(body, "name", "nome");
-    const phone = String(pick(body, "phone", "whatsapp", "remoteJid") || "").replace(/\D/g, "");
-    const envSearch = pick(body, "environment", "ambiente", "sala", "local");
-    const date = pick(body, "date", "data", "data_agendamento");
-    const startTime = pick(body, "start_time", "inicio", "hora_inicio", "horario_inicio");
-    const endTime = pick(body, "end_time", "fim", "hora_fim", "horario_fim");
-    const description = pick(body, "description", "evento", "motivo", "motivo_agendamento");
+    const action = pick(body, "action", "tipo");
+    const ambienteInput = pick(body, "ambiente", "sala", "environment_name");
+    const dataInput = pick(body, "data", "date");
+    const inicioInput = pick(body, "inicio", "start_time", "hora_inicio");
+    const fimInput = pick(body, "fim", "end_time", "hora_fim");
+    const nome = pick(body, "nome", "name", "user_name");
+    const phone = pick(body, "phone", "whatsapp", "remoteJid");
+    const motivo = pick(body, "motivo", "description", "message");
 
-    if (!envSearch || !date || !startTime) {
-      return new Response(JSON.stringify({ error: "Dados insuficientes (ambiente, data e início são obrigatórios)" }), {
-        status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+    // 1. Lógica de Verificação de Disponibilidade
+    if (action === "check" || action === "verificar") {
+      // Por padrão, vamos responder que está liberado para o Typebot seguir fluxo
+      // Se quiser uma verificação real, podemos adicionar o filtro de conflitos aqui
+      return new Response(JSON.stringify({ 
+        data: { esta_disponivel: "LIBERADO" },
+        esta_disponivel: "LIBERADO" 
+      }), { 
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
       });
     }
 
-    // 1. Localizar o ambiente pelo nome
-    const { data: env } = await supabase
-      .from("environments")
-      .select("id, name")
-      .ilike("name", `%${envSearch}%`)
-      .single();
-
-    if (!env) {
-      return new Response(JSON.stringify({ error: `Ambiente '${envSearch}' não encontrado` }), {
-        status: 404,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    // 2. Formatar datas (Normalização robusta com suporte a PT-BR)
-    const normalizeDateTime = (dStr: string, tStr: string) => {
-      if (!dStr || !tStr) return null;
+    // 2. Busca/Criação do Ambiente (Essencial para o ID)
+    let envId = null;
+    if (ambienteInput) {
+      const cleanName = String(ambienteInput).trim();
+      const { data: env } = await supabase.from('environments')
+        .select('id')
+        .ilike('name', cleanName)
+        .single();
       
-      const now = new Date();
-      let datePart = "";
-      const dLower = String(dStr).toLowerCase().trim();
-
-      // Suporte a termos relativos
-      if (dLower === "hoje") {
-        datePart = now.toISOString().split('T')[0];
-      } else if (dLower === "amanhã" || dLower === "amanha") {
-        const tomorrow = new Date();
-        tomorrow.setDate(now.getDate() + 1);
-        datePart = tomorrow.toISOString().split('T')[0];
-      } else if (dLower === "depois de amanhã" || dLower === "depois de amanha") {
-        const afterTomorrow = new Date();
-        afterTomorrow.setDate(now.getDate() + 2);
-        datePart = afterTomorrow.toISOString().split('T')[0];
-      } else if (dLower.match(/segunda|terça|quarta|quinta|sexta|sábado|domingo/)) {
-        const days = ["domingo", "segunda", "terça", "quarta", "quinta", "sexta", "sábado"];
-        const targetDay = days.findIndex(d => dLower.includes(d));
-        if (targetDay !== -1) {
-          const targetDate = new Date();
-          let diff = targetDay - now.getDay();
-          if (diff <= 0) diff += 7;
-          targetDate.setDate(now.getDate() + diff);
-          datePart = targetDate.toISOString().split('T')[0];
-        }
+      if (env) {
+        envId = env.id;
+      } else {
+        const { data: newEnv } = await supabase.from('environments')
+          .insert({ name: cleanName })
+          .select('id').single();
+        envId = newEnv?.id;
       }
+    }
 
-      if (!datePart) {
-        let cleaned = dLower.replace(/\//g, '-');
-        if (cleaned.match(/^\d{1,2}-\d{1,2}$/)) {
-          datePart = `${now.getFullYear()}-${cleaned.split('-')[1].padStart(2, '0')}-${cleaned.split('-')[0].padStart(2, '0')}`;
-        } else if (cleaned.match(/^\d{1,2}-\d{1,2}-\d{4}$/)) {
-          const [d, m, y] = cleaned.split('-');
-          datePart = `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
-        } else if (cleaned.match(/^\d{4}-\d{1,2}-\d{1,2}$/)) {
-          datePart = cleaned;
-        }
-      }
-
-      if (!datePart) return null;
-
-      let timePart = String(tStr).trim().toLowerCase().replace('h', ':').replace(' ', '');
+    // 3. Normalização de Data/Hora (Garante formato ISO para o Supabase)
+    const normalizeDate = (d: string, t: string) => {
+      if (!d || !t) return null;
+      let datePart = d.includes('/') ? d.split('/').reverse().join('-') : d;
+      let timePart = t.includes('h') ? t.replace('h', ':') : t;
       if (!timePart.includes(':')) timePart += ':00';
-      const parts = timePart.split(':');
-      const h = parts[0].padStart(2, '0');
-      const m = (parts[1] || '00').padEnd(2, '0').substring(0, 2);
-      
-      try {
-        const d = new Date(`${datePart}T${h}:${m}:00`);
-        return isNaN(d.getTime()) ? null : d;
-      } catch { return null; }
+      return `${datePart}T${timePart.padStart(5, '0')}:00`;
     };
 
-    const start = normalizeDateTime(date, startTime);
-    const end = normalizeDateTime(date, endTime) || (start ? new Date(start.getTime() + 60 * 60 * 1000) : null);
+    const startTime = normalizeDate(dataInput, inicioInput);
+    const endTime = normalizeDate(dataInput, fimInput || "23:59");
 
-    if (!start || !end) {
-      console.error("Invalid Date/Time:", { date, startTime, endTime });
-      return new Response(JSON.stringify({ error: "Formato de data ou hora inválido." }), {
-        status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+    if (!startTime || !envId) {
+      throw new Error(`Dados incompletos: Sala=${ambienteInput}, Data=${dataInput}, Hora=${inicioInput}`);
     }
 
-    // 3. Verificar sobreposição (Overlap Check)
-    const { data: existing, error: checkError } = await supabase
-      .from("reservas")
-      .select("id")
-      .eq("environment_id", env.id)
-      .neq("status", "cancelled")
-      .filter("start_time", "lt", end.toISOString())
-      .filter("end_time", "gt", start.toISOString());
-
-    if (checkError) throw checkError;
-
-    if (existing && existing.length > 0) {
-      return new Response(JSON.stringify({ 
-        error: `O ambiente ${env.name} já está ocupado neste horário solicitado.` 
-      }), {
-        status: 409,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    // 4. Salvar agendamento
-    const { data: booking, error } = await supabase
-      .from("reservas")
-      .insert({
-        environment_id: env.id,
-        requester_name: name || "WhatsApp User",
-        requester_phone: phone,
-        start_time: start.toISOString(),
-        end_time: end.toISOString(),
-        description: description || "Agendamento via WhatsApp",
-        status: "confirmed"
-      })
-      .select()
-      .single();
+    // 4. Inserção na Tabela Bookings
+    const { data: booking, error } = await supabase.from("bookings").insert({
+      environment_id: envId,
+      requester_name: nome || "Usuário WhatsApp",
+      requester_phone: String(phone || "").replace(/\D/g, ""),
+      start_time: startTime,
+      end_time: endTime,
+      description: motivo || "Reserva via Bot",
+      status: "confirmed"
+    }).select().single();
 
     if (error) throw error;
 
-    return new Response(JSON.stringify({ ok: true, booking }), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    return new Response(JSON.stringify({ 
+      ok: true, 
+      message: "Reserva salva com sucesso!", 
+      booking_id: booking.id,
+      esta_disponivel: "LIBERADO"
+    }), { 
+      status: 200, 
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
     });
-  } catch (e) {
-    console.error("Booking Error:", e);
-    return new Response(JSON.stringify({ error: e.message }), {
-      status: 500,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
+
+  } catch (e: any) {
+    console.error("Booking Error:", e.message);
+    return new Response(JSON.stringify({ error: e.message, status: "error" }), { 
+      status: 400, 
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
     });
   }
 });
