@@ -67,13 +67,9 @@ serve(async (req) => {
     const findEnvironmentFlexibly = async (nameInput: string) => {
       if (!nameInput) return null;
       const cleanInput = nameInput.toLowerCase().replace(/\s/g, '').replace(/0(?=\d)/g, '');
-      const { data: allEnvs } = await supabase.from('environments').select('id, name');
-      // Tenta também na tabela 'ambientes' se 'environments' falhar (Lovable sync)
-      let envs = allEnvs;
-      if (!envs || envs.length === 0) {
-        const { data: ptEnvs } = await supabase.from('ambientes').select('id, name');
-        envs = ptEnvs;
-      }
+      
+      // Busca apenas na tabela em português que vimos no seu print
+      const { data: envs } = await supabase.from('ambientes').select('id, name');
       
       return envs?.find(e => {
         const dbClean = e.name.toLowerCase().replace(/\s/g, '').replace(/0(?=\d)/g, '');
@@ -121,13 +117,13 @@ serve(async (req) => {
     
     // Se for Agendamento (Category: booking ou prefixo [AGENDA])
     if (category === "booking" || (subject && String(subject).includes("[AGENDA]")) || action === "booking") {
-      const envInput = environment_name || body.sala || body.ambiente || (subject ? subject.split("-")[0].replace("[AGENDA]", "").trim() : "");
+      const envInput = environment_name || body.sala || body.ambiente || pick("p_room_name") || (subject ? subject.split("-")[0].replace("[AGENDA]", "").trim() : "");
       let env = await findEnvironmentFlexibly(envInput);
 
-      // Auto-criação de ambiente se não existir
+      // Auto-criação de ambiente se não existir (na tabela correta: ambientes)
       if (!env && envInput) {
         const { data: newEnv } = await supabase
-          .from('environments')
+          .from('ambientes')
           .insert({ name: envInput.charAt(0).toUpperCase() + envInput.slice(1) })
           .select().single();
         env = newEnv;
