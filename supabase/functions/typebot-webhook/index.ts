@@ -21,6 +21,7 @@ serve(async (req) => {
     );
 
     const body = await req.json();
+    console.log("Incoming request body:", JSON.stringify(body));
     
     // Helper para pegar campos com nomes variados
     const pick = (...keys: string[]) => {
