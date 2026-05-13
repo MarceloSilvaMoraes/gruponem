@@ -68,21 +68,57 @@ Deno.serve(async (req) => {
       });
     }
 
-    // 2. Formatar datas (Normalização robusta)
+    // 2. Formatar datas (Normalização robusta com suporte a PT-BR)
     const normalizeDateTime = (dStr: string, tStr: string) => {
       if (!dStr || !tStr) return null;
-      let datePart = String(dStr).trim().replace(/\//g, '-');
-      if (datePart.match(/^\d{1,2}-\d{1,2}$/)) {
-        datePart = `${new Date().getFullYear()}-${datePart.split('-')[1].padStart(2, '0')}-${datePart.split('-')[0].padStart(2, '0')}`;
-      } else if (datePart.match(/^\d{1,2}-\d{1,2}-\d{4}$/)) {
-        const [d, m, y] = datePart.split('-');
-        datePart = `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
+      
+      const now = new Date();
+      let datePart = "";
+      const dLower = String(dStr).toLowerCase().trim();
+
+      // Suporte a termos relativos
+      if (dLower === "hoje") {
+        datePart = now.toISOString().split('T')[0];
+      } else if (dLower === "amanhã" || dLower === "amanha") {
+        const tomorrow = new Date();
+        tomorrow.setDate(now.getDate() + 1);
+        datePart = tomorrow.toISOString().split('T')[0];
+      } else if (dLower === "depois de amanhã" || dLower === "depois de amanha") {
+        const afterTomorrow = new Date();
+        afterTomorrow.setDate(now.getDate() + 2);
+        datePart = afterTomorrow.toISOString().split('T')[0];
+      } else if (dLower.match(/segunda|terça|quarta|quinta|sexta|sábado|domingo/)) {
+        const days = ["domingo", "segunda", "terça", "quarta", "quinta", "sexta", "sábado"];
+        const targetDay = days.findIndex(d => dLower.includes(d));
+        if (targetDay !== -1) {
+          const targetDate = new Date();
+          let diff = targetDay - now.getDay();
+          if (diff <= 0) diff += 7;
+          targetDate.setDate(now.getDate() + diff);
+          datePart = targetDate.toISOString().split('T')[0];
+        }
       }
+
+      if (!datePart) {
+        let cleaned = dLower.replace(/\//g, '-');
+        if (cleaned.match(/^\d{1,2}-\d{1,2}$/)) {
+          datePart = `${now.getFullYear()}-${cleaned.split('-')[1].padStart(2, '0')}-${cleaned.split('-')[0].padStart(2, '0')}`;
+        } else if (cleaned.match(/^\d{1,2}-\d{1,2}-\d{4}$/)) {
+          const [d, m, y] = cleaned.split('-');
+          datePart = `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
+        } else if (cleaned.match(/^\d{4}-\d{1,2}-\d{1,2}$/)) {
+          datePart = cleaned;
+        }
+      }
+
+      if (!datePart) return null;
+
       let timePart = String(tStr).trim().toLowerCase().replace('h', ':').replace(' ', '');
       if (!timePart.includes(':')) timePart += ':00';
       const parts = timePart.split(':');
       const h = parts[0].padStart(2, '0');
       const m = (parts[1] || '00').padEnd(2, '0').substring(0, 2);
+      
       try {
         const d = new Date(`${datePart}T${h}:${m}:00`);
         return isNaN(d.getTime()) ? null : d;
