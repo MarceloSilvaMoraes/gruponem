@@ -150,55 +150,69 @@ serve(async (req) => {
     // ========= MODO: INSERT (Criação de Agendamento ou Ticket) =========
     const phoneRaw = String(phone || body.remoteJid || "").replace(/\D/g, "");
     
-    // Se for Agendamento (Category: booking ou se tiver dados de ambiente e data)
-    const isBooking = category === "booking" || 
-                     (subject && String(subject).includes("[AGENDA]")) || 
-                     (envInput && dateInput && startTimeInput);
+    // Se for Agendamento (explicitamente solicitado ou se tiver dados de ambiente e data)
+    const isBookingRequest = action === "booking" || category === "booking" || (subject && String(subject).includes("[AGENDA]"));
+    const hasBookingData = envInput && dateInput && startTimeInput;
 
-    if (isBooking) {
+    if (isBookingRequest || hasBookingData) {
+      console.log("Attempting to create booking for:", { envInput, dateInput, startTimeInput });
+      
       let env = await findEnvironmentFlexibly(envInput || (subject ? subject.split("-")[0].replace("[AGENDA]", "").trim() : ""));
 
       if (!env && envInput) {
-        // Criar ambiente se não existir
-        const { data: newEnv } = await supabase
+        console.log("Environment not found, creating:", envInput);
+        const { data: newEnv, error: envErr } = await supabase
           .from('environments')
           .insert({ name: String(envInput).charAt(0).toUpperCase() + String(envInput).slice(1) })
           .select().single();
-        env = newEnv;
+        
+        if (envErr) {
+          console.error("Error creating environment:", envErr);
+        } else {
+          env = newEnv;
+        }
       }
 
-      if (env) {
-        const startISO = normalizeDateTime(dateInput, startTimeInput);
-        if (startISO) {
-          const endISO = normalizeDateTime(dateInput, endTimeInput) || new Date(startISO.getTime() + 3600000);
-          
-          const { data: booking, error: bErr } = await supabase.from("bookings").insert({
-            environment_id: env.id,
-            requester_name: name || "WhatsApp User",
-            requester_phone: phoneRaw,
-            start_time: startISO.toISOString(),
-            end_time: endISO.toISOString(),
-            description: description || subject || `Reserva de ${env.name}`,
-            status: "confirmed"
-          }).select().single();
+      if (!env) {
+        return json({ error: "Ambiente não encontrado e não pôde ser criado.", esta_disponivel: "ERRO" }, 400);
+      }
 
-          if (!bErr) {
-            return json({ 
-              ok: true, 
-              message: "Reserva confirmada", 
-              booking_id: booking.id,
-              esta_disponivel: "LIBERADO",
-              available: true,
-              data: { esta_disponivel: "LIBERADO" }
-            });
-          } else {
-            console.error("Error creating booking:", bErr);
-          }
-        }
+      const startISO = normalizeDateTime(dateInput, startTimeInput);
+      if (!startISO) {
+        return json({ 
+          error: `Data ou Hora inválida. Recebido: Data=${dateInput}, Hora=${startTimeInput}`,
+          esta_disponivel: "ERRO" 
+        }, 400);
+      }
+
+      const endISO = normalizeDateTime(dateInput, endTimeInput) || new Date(startISO.getTime() + 3600000);
+      
+      const { data: booking, error: bErr } = await supabase.from("bookings").insert({
+        environment_id: env.id,
+        requester_name: name || "WhatsApp User",
+        requester_phone: phoneRaw,
+        start_time: startISO.toISOString(),
+        end_time: endISO.toISOString(),
+        description: description || subject || `Reserva de ${env.name}`,
+        status: "confirmed"
+      }).select().single();
+
+      if (!bErr) {
+        return json({ 
+          ok: true, 
+          message: "Reserva confirmada com sucesso!", 
+          booking_id: booking.id,
+          esta_disponivel: "LIBERADO",
+          available: true,
+          data: { esta_disponivel: "LIBERADO" }
+        });
+      } else {
+        console.error("Error creating booking record:", bErr);
+        return json({ error: "Erro ao inserir reserva no banco de dados: " + bErr.message, esta_disponivel: "ERRO" }, 500);
       }
     }
 
-    // Fluxo Padrão: Criar Ticket (Chamado)
+    // Fluxo Padrão: Criar Ticket (Chamado) - Só chega aqui se não for um pedido de reserva
     const { data: contact } = await supabase.from("contacts")
       .upsert({ phone: phoneRaw, name: name || "Novo Contato" }, { onConflict: "phone" })
       .select().single();
@@ -213,14 +227,14 @@ serve(async (req) => {
         subject: finalSubject,
         description: description || body.message || subject || "Sem descrição",
         status: "open",
-        category: category || (isBooking ? "booking" : "general"),
+        category: category || "general",
         priority: "medium"
       }).select().single();
 
       return json({ 
         ok: true, 
         ticket_id: ticket?.id, 
-        message: "Ticket criado",
+        message: "Ticket criado (não foi identificado como reserva estruturada)",
         esta_disponivel: "LIBERADO",
         available: true,
         data: { esta_disponivel: "LIBERADO" }
