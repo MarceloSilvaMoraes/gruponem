@@ -164,22 +164,32 @@ serve(async (req) => {
       .select().single();
 
     if (contact) {
+      const formattedDate = dateInput ? ` no dia ${dateInput}` : "";
+      const formattedTime = startTimeInput ? ` às ${startTimeInput}` : "";
+      const finalSubject = subject || `[AGENDA] ${envInput || "Ambiente"}${formattedDate}${formattedTime}`;
+
       const { data: ticket } = await supabase.from("tickets").insert({
         contact_id: contact.id,
-        subject: subject || "Novo Chamado via WhatsApp",
-        description: description || body.message || "Sem descrição",
+        subject: finalSubject,
+        description: description || body.message || "Agendamento solicitado via WhatsApp",
         status: "open",
-        category: category || "general",
+        category: "booking", // Força categoria booking para aparecer na agenda
         priority: "medium"
       }).select().single();
 
-      return json({ ok: true, ticket_id: ticket?.id });
+      return json({ 
+        ok: true, 
+        ticket_id: ticket?.id, 
+        esta_disponivel: "LIBERADO", // Garante que o Typebot siga o fluxo
+        available: true,
+        data: { esta_disponivel: "LIBERADO" }
+      });
     }
 
-    return json({ error: "Não foi possível processar o pedido. Verifique os dados enviados." }, 400);
+    return json({ error: "Não foi possível processar o pedido. Verifique os dados enviados.", esta_disponivel: "ERRO" }, 400);
 
   } catch (e: any) {
     console.error("Typebot Webhook Error:", e.message);
-    return json({ error: e.message }, 500);
+    return json({ error: e.message, esta_disponivel: "ERRO" }, 500);
   }
 });
