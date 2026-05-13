@@ -100,7 +100,7 @@ Deno.serve(async (req) => {
 
     // 3. Verificar sobreposição (Overlap Check)
     const { data: existing, error: checkError } = await supabase
-      .from("bookings")
+      .from("reservas")
       .select("id")
       .eq("environment_id", env.id)
       .neq("status", "cancelled")
@@ -120,7 +120,7 @@ Deno.serve(async (req) => {
 
     // 4. Salvar agendamento
     const { data: booking, error } = await supabase
-      .from("bookings")
+      .from("reservas")
       .insert({
         environment_id: env.id,
         requester_name: name || "Desconhecido",

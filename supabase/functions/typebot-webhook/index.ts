@@ -21,19 +21,37 @@ serve(async (req) => {
     );
 
     const body = await req.json();
-    const { action, environment_name, date, start_time, end_time, category, name, phone, subject, description } = body;
+    
+    // Helper para pegar campos com nomes variados
+    const pick = (...keys: string[]) => {
+      for (const k of keys) {
+        if (body[k] !== undefined && body[k] !== null) return body[k];
+      }
+      return undefined;
+    };
+
+    const action = pick("action", "event", "tipo");
+    const envInput = pick("environment_name", "sala", "ambiente", "p_room_name", "local");
+    const dateInput = pick("date", "data", "p_date");
+    const startTimeInput = pick("start_time", "inicio", "p_start", "hora_inicio");
+    const endTimeInput = pick("end_time", "fim", "p_end", "hora_fim");
+    const category = pick("category", "categoria");
+    const name = pick("name", "nome", "p_name", "user_name");
+    const phone = pick("phone", "whatsapp", "p_phone", "remoteJid");
+    const subject = pick("subject", "assunto", "p_subject");
+    const description = pick("description", "mensagem", "message", "p_message", "p_desc");
 
     // Função Universal de Normalização de Data/Hora
     const normalizeDateTime = (dStr: string, tStr: string) => {
       if (!dStr || !tStr) return null;
-      let datePart = dStr.trim().replace(/\//g, '-');
+      let datePart = String(dStr).trim().replace(/\//g, '-');
       if (datePart.match(/^\d{1,2}-\d{1,2}$/)) {
         datePart = `${new Date().getFullYear()}-${datePart.split('-')[1].padStart(2, '0')}-${datePart.split('-')[0].padStart(2, '0')}`;
       } else if (datePart.match(/^\d{1,2}-\d{1,2}-\d{4}$/)) {
         const [d, m, y] = datePart.split('-');
         datePart = `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
       }
-      let timePart = tStr.trim().toLowerCase().replace('h', ':').replace(' ', '');
+      let timePart = String(tStr).trim().toLowerCase().replace('h', ':').replace(' ', '');
       if (!timePart.includes(':')) timePart += ':00';
       const parts = timePart.split(':');
       const h = parts[0].padStart(2, '0');
@@ -49,28 +67,33 @@ serve(async (req) => {
       if (!nameInput) return null;
       const cleanInput = nameInput.toLowerCase().replace(/\s/g, '').replace(/0(?=\d)/g, '');
       const { data: allEnvs } = await supabase.from('environments').select('id, name');
-      return allEnvs?.find(e => {
+      // Tenta também na tabela 'ambientes' se 'environments' falhar (Lovable sync)
+      let envs = allEnvs;
+      if (!envs || envs.length === 0) {
+        const { data: ptEnvs } = await supabase.from('ambientes').select('id, name');
+        envs = ptEnvs;
+      }
+      
+      return envs?.find(e => {
         const dbClean = e.name.toLowerCase().replace(/\s/g, '').replace(/0(?=\d)/g, '');
         return dbClean === cleanInput || e.name.toLowerCase().includes(nameInput.toLowerCase());
       });
     };
 
     // ========= MODO: CHECK (Verificação de Disponibilidade) =========
-    if (action === "check" || body.event === "check_availability") {
-      const startReq = normalizeDateTime(date, start_time);
-      const endReq = normalizeDateTime(date, end_time || (start_time ? `${parseInt(start_time)+1}:00` : ""));
+    if (action === "check" || action === "check_availability") {
+      const startReq = normalizeDateTime(dateInput, startTimeInput);
+      const endReq = normalizeDateTime(dateInput, endTimeInput || (startTimeInput ? `${parseInt(startTimeInput)+1}:00` : ""));
 
       if (!startReq) return json({ available: false, esta_disponivel: false, message: "Data/Hora inválida" });
 
-      const env = await findEnvironmentFlexibly(environment_name || body.sala || body.ambiente);
+      const env = await findEnvironmentFlexibly(envInput);
       if (!env) {
-        // Se a sala não existe, avisamos mas podemos considerar disponível se quisermos 
-        // criar na hora. Aqui, vamos ser conservadores.
-        return json({ available: true, esta_disponivel: true, message: "Sala nova - Disponível" });
+        return json({ available: true, esta_disponivel: true, message: "Ambiente novo - Disponível" });
       }
 
       const { data: bookings } = await supabase
-        .from('bookings')
+        .from('reservas')
         .select('start_time, end_time')
         .eq('environment_id', env.id)
         .neq('status', 'cancelled');
@@ -110,11 +133,11 @@ serve(async (req) => {
       }
 
       if (env) {
-        const startISO = normalizeDateTime(date, start_time);
+        const startISO = normalizeDateTime(dateInput, startTimeInput);
         if (startISO) {
-          const endISO = normalizeDateTime(date, end_time) || new Date(startISO.getTime() + 3600000);
+          const endISO = normalizeDateTime(dateInput, endTimeInput) || new Date(startISO.getTime() + 3600000);
           
-          const { data: booking, error } = await supabase.from("bookings").insert({
+          const { data: booking, error } = await supabase.from("reservas").insert({
             environment_id: env.id,
             requester_name: name || "WhatsApp User",
             requester_phone: phoneRaw,
