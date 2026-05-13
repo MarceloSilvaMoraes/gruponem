@@ -31,10 +31,14 @@ serve(async (req) => {
       return undefined;
     };
 
-    const action = pick("action", "event", "tipo");
+    const actionRaw = pick("action", "event", "tipo");
     const envInput = pick("environment_name", "sala", "ambiente", "p_room_name", "local");
     const dateInput = pick("date", "data", "p_date");
     const startTimeInput = pick("start_time", "inicio", "p_start", "hora_inicio");
+    
+    // Se não houver ação explícita, mas houver sala e data, assume que é uma verificação (Check)
+    const action = actionRaw || (envInput && dateInput && !pick("category") ? "check" : undefined);
+
     const endTimeInput = pick("end_time", "fim", "p_end", "hora_fim");
     const category = pick("category", "categoria");
     const name = pick("name", "nome", "p_name", "user_name");
@@ -104,12 +108,16 @@ serve(async (req) => {
         return bS < eTime && bE > sTime;
       });
 
-      return json({ 
+      const res = { 
         available: !conflict, 
         esta_disponivel: !conflict ? "LIBERADO" : "OCUPADO",
         ok: !conflict,
-        message: conflict ? "Ocupado" : "Horário disponível" 
-      });
+        message: conflict ? "Ocupado" : "Horário disponível",
+        data: {
+          esta_disponivel: !conflict ? "LIBERADO" : "OCUPADO"
+        }
+      };
+      return json(res);
     }
 
     // ========= MODO: INSERT (Criação de Agendamento ou Ticket) =========
