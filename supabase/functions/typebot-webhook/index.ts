@@ -21,9 +21,9 @@ serve(async (req) => {
     );
 
     const body = await req.json();
-    console.log("Webhook Body:", body);
+    console.log("Webhook Body:", JSON.stringify(body));
 
-    // Mapeamento flexível de campos do Typebot
+    // Mapeamento flexível de campos do Typebot (Combina nomes locais e remotos)
     const pick = (obj: any, ...keys: string[]) => {
       for (const k of keys) {
         if (obj[k] !== undefined && obj[k] !== null) return obj[k];
@@ -33,16 +33,16 @@ serve(async (req) => {
       return null;
     };
 
-    const action = pick(body, "action", "event");
-    const envInput = pick(body, "environment_name", "sala", "ambiente", "local", "environment");
-    const dateInput = pick(body, "date", "data", "data_agendamento");
-    const startTimeInput = pick(body, "start_time", "inicio", "hora_inicio", "horario_inicio");
-    const endTimeInput = pick(body, "end_time", "fim", "hora_fim", "horario_fim");
+    const action = pick(body, "action", "event", "tipo");
+    const envInput = pick(body, "environment_name", "sala", "ambiente", "local", "environment", "p_room_name");
+    const dateInput = pick(body, "date", "data", "data_agendamento", "p_date");
+    const startTimeInput = pick(body, "start_time", "inicio", "hora_inicio", "horario_inicio", "p_start");
+    const endTimeInput = pick(body, "end_time", "fim", "hora_fim", "horario_fim", "p_end");
     const category = pick(body, "category", "categoria");
-    const name = pick(body, "name", "nome");
-    const phone = pick(body, "phone", "whatsapp", "remoteJid");
-    const subject = pick(body, "subject", "assunto");
-    const description = pick(body, "description", "descricao", "motivo", "motivo_agendamento", "evento");
+    const name = pick(body, "name", "nome", "p_name", "user_name");
+    const phone = pick(body, "phone", "whatsapp", "remoteJid", "p_phone");
+    const subject = pick(body, "subject", "assunto", "p_subject");
+    const description = pick(body, "description", "descricao", "motivo", "motivo_agendamento", "evento", "message", "p_message", "p_desc");
 
     // Função Universal de Normalização de Data/Hora
     const normalizeDateTime = (dStr: string, tStr: string) => {
@@ -85,10 +85,10 @@ serve(async (req) => {
       const startReq = normalizeDateTime(dateInput, startTimeInput);
       const endReq = normalizeDateTime(dateInput, endTimeInput || (startTimeInput ? `${parseInt(startTimeInput)+1}:00` : ""));
 
-      if (!startReq) return json({ available: false, esta_disponivel: false, message: "Data ou hora inválida" });
+      if (!startReq) return json({ available: false, esta_disponivel: "ERRO", message: "Data ou hora inválida" });
 
       const env = await findEnvironmentFlexibly(envInput);
-      if (!env) return json({ available: true, esta_disponivel: true, message: "Sala nova ou não encontrada" });
+      if (!env) return json({ available: true, esta_disponivel: "LIBERADO", message: "Sala nova ou não encontrada" });
 
       const { data: bookings } = await supabase
         .from('bookings')
@@ -107,8 +107,9 @@ serve(async (req) => {
 
       return json({ 
         available: !conflict, 
-        esta_disponivel: !conflict, 
-        message: conflict ? "Ocupado" : "Livre" 
+        esta_disponivel: !conflict ? "LIBERADO" : "OCUPADO", 
+        message: conflict ? "Ocupado" : "Livre",
+        data: { esta_disponivel: !conflict ? "LIBERADO" : "OCUPADO" }
       });
     }
 
@@ -148,7 +149,14 @@ serve(async (req) => {
           }).select().single();
 
           if (!bErr) {
-            return json({ ok: true, message: "Reserva confirmada", booking_id: booking.id });
+            return json({ 
+              ok: true, 
+              message: "Reserva confirmada", 
+              booking_id: booking.id,
+              esta_disponivel: "LIBERADO",
+              available: true,
+              data: { esta_disponivel: "LIBERADO" }
+            });
           } else {
             console.error("Error creating booking:", bErr);
           }
@@ -162,27 +170,33 @@ serve(async (req) => {
       .select().single();
 
     if (contact) {
+      const formattedDate = dateInput ? ` no dia ${dateInput}` : "";
+      const formattedTime = startTimeInput ? ` às ${startTimeInput}` : "";
+      const finalSubject = subject || `[AGENDA] ${envInput || "Ambiente"}${formattedDate}${formattedTime}`;
+
       const { data: ticket } = await supabase.from("tickets").insert({
         contact_id: contact.id,
-        subject: subject || (envInput ? `[AGENDA] ${envInput} - ${description || "Reserva"}` : "Novo Chamado via WhatsApp"),
+        subject: finalSubject,
         description: description || body.message || subject || "Sem descrição",
         status: "open",
         category: category || (isBooking ? "booking" : "general"),
         priority: "medium"
       }).select().single();
 
-      return json({ ok: true, ticket_id: ticket?.id, message: "Ticket criado" });
+      return json({ 
+        ok: true, 
+        ticket_id: ticket?.id, 
+        message: "Ticket criado",
+        esta_disponivel: "LIBERADO",
+        available: true,
+        data: { esta_disponivel: "LIBERADO" }
+      });
     }
 
-    return json({ error: "Não foi possível processar a solicitação" }, 400);
+    return json({ error: "Não foi possível processar a solicitação", esta_disponivel: "ERRO" }, 400);
 
   } catch (e: any) {
     console.error("Webhook Error:", e);
-    return json({ error: e.message }, 500);
-  }
-});
-
-  } catch (e: any) {
-    return json({ error: e.message }, 500);
+    return json({ error: e.message, esta_disponivel: "ERRO" }, 500);
   }
 });
