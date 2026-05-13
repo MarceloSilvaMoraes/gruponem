@@ -150,37 +150,45 @@ serve(async (req) => {
     // ========= MODO: INSERT (Criação de Agendamento ou Ticket) =========
     const phoneRaw = String(phone || body.remoteJid || "").replace(/\D/g, "");
     
-    // Se for Agendamento (explicitamente solicitado ou se tiver dados de ambiente e data)
-    const isBookingRequest = action === "booking" || category === "booking" || (subject && String(subject).includes("[AGENDA]"));
+    const isBookingRequest = action === "booking" || category === "booking";
     const hasBookingData = envInput && dateInput && startTimeInput;
 
+    const debug_info = {
+      received_action: action,
+      received_env: envInput,
+      received_date: dateInput,
+      received_start: startTimeInput,
+      is_booking_request: isBookingRequest,
+      has_booking_data: hasBookingData,
+      version: "5.0"
+    };
+
     if (isBookingRequest || hasBookingData) {
-      console.log("Attempting to create booking for:", { envInput, dateInput, startTimeInput });
+      console.log("Processing Booking Request:", debug_info);
       
       let env = await findEnvironmentFlexibly(envInput || (subject ? subject.split("-")[0].replace("[AGENDA]", "").trim() : ""));
 
       if (!env && envInput) {
-        console.log("Environment not found, creating:", envInput);
-        const { data: newEnv, error: envErr } = await supabase
+        const { data: newEnv } = await supabase
           .from('environments')
           .insert({ name: String(envInput).charAt(0).toUpperCase() + String(envInput).slice(1) })
           .select().single();
-        
-        if (envErr) {
-          console.error("Error creating environment:", envErr);
-        } else {
-          env = newEnv;
-        }
+        env = newEnv;
       }
 
       if (!env) {
-        return json({ error: "Ambiente não encontrado e não pôde ser criado.", esta_disponivel: "ERRO" }, 400);
+        return json({ 
+          error: "Ambiente não identificado.", 
+          debug_info, 
+          esta_disponivel: "ERRO" 
+        }, 400);
       }
 
       const startISO = normalizeDateTime(dateInput, startTimeInput);
       if (!startISO) {
         return json({ 
-          error: `Data ou Hora inválida. Recebido: Data=${dateInput}, Hora=${startTimeInput}`,
+          error: "Data ou hora inválida.", 
+          debug_info, 
           esta_disponivel: "ERRO" 
         }, 400);
       }
@@ -200,51 +208,51 @@ serve(async (req) => {
       if (!bErr) {
         return json({ 
           ok: true, 
-          message: "Reserva confirmada com sucesso!", 
+          message: "Reserva confirmada!", 
           booking_id: booking.id,
+          debug_info,
           esta_disponivel: "LIBERADO",
-          available: true,
           data: { esta_disponivel: "LIBERADO" }
         });
       } else {
-        console.error("Error creating booking record:", bErr);
-        return json({ error: "Erro ao inserir reserva no banco de dados: " + bErr.message, esta_disponivel: "ERRO" }, 500);
+        return json({ error: bErr.message, debug_info, esta_disponivel: "ERRO" }, 500);
       }
     }
 
-    // Fluxo Padrão: Criar Ticket (Chamado) - Só chega aqui se não for um pedido de reserva
+    // Fluxo Padrão: Criar Ticket (Chamado)
+    // Se action for "booking" mas chegou aqui, é porque algo falhou acima.
+    if (isBookingRequest) {
+      return json({ error: "Falha ao processar reserva estruturada.", debug_info }, 400);
+    }
+
     const { data: contact } = await supabase.from("contacts")
       .upsert({ phone: phoneRaw, name: name || "Novo Contato" }, { onConflict: "phone" })
       .select().single();
 
     if (contact) {
-      const formattedDate = dateInput ? ` no dia ${dateInput}` : "";
-      const formattedTime = startTimeInput ? ` às ${startTimeInput}` : "";
-      const finalSubject = subject || `[AGENDA] ${envInput || "Ambiente"}${formattedDate}${formattedTime}`;
+      const finalSubject = subject || `Novo Chamado - ${envInput || "Geral"}`;
 
       const { data: ticket } = await supabase.from("tickets").insert({
         contact_id: contact.id,
         subject: finalSubject,
         description: description || body.message || subject || "Sem descrição",
         status: "open",
-        category: category || "general",
-        priority: "medium"
+        category: category || "general"
       }).select().single();
 
       return json({ 
         ok: true, 
         ticket_id: ticket?.id, 
-        message: "Ticket criado (não foi identificado como reserva estruturada)",
-        esta_disponivel: "LIBERADO",
-        available: true,
-        data: { esta_disponivel: "LIBERADO" }
+        message: "Ticket criado",
+        debug_info,
+        esta_disponivel: "LIBERADO"
       });
     }
 
-    return json({ error: "Não foi possível processar a solicitação", esta_disponivel: "ERRO" }, 400);
+    return json({ error: "Erro desconhecido", debug_info }, 400);
 
   } catch (e: any) {
     console.error("Webhook Error:", e);
-    return json({ error: e.message, esta_disponivel: "ERRO" }, 500);
+    return json({ error: e.message, version: "5.0" }, 500);
   }
 });
