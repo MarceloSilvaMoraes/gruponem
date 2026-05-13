@@ -106,7 +106,7 @@ serve(async (req) => {
 
       return json({ 
         available: !conflict, 
-        esta_disponivel: !conflict,
+        esta_disponivel: !conflict ? "LIBERADO" : "OCUPADO",
         ok: !conflict,
         message: conflict ? "Ocupado" : "Horário disponível" 
       });
