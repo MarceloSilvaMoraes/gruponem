@@ -32,7 +32,7 @@ Deno.serve(async (req) => {
 
     const pick = (obj: any, ...keys: string[]) => {
       for (const k of keys) {
-        if (obj[k]) return obj[k];
+        if (obj[k] !== undefined && obj[k] !== null) return obj[k];
         const found = Object.keys(obj).find(ok => ok.toLowerCase() === k.toLowerCase());
         if (found) return obj[found];
       }
@@ -42,10 +42,10 @@ Deno.serve(async (req) => {
     const name = pick(body, "name", "nome");
     const phone = String(pick(body, "phone", "whatsapp", "remoteJid") || "").replace(/\D/g, "");
     const envSearch = pick(body, "environment", "ambiente", "sala", "local");
-    const date = pick(body, "date", "data");
-    const startTime = pick(body, "start_time", "inicio", "hora_inicio");
-    const endTime = pick(body, "end_time", "fim", "hora_fim");
-    const description = pick(body, "description", "evento", "motivo");
+    const date = pick(body, "date", "data", "data_agendamento");
+    const startTime = pick(body, "start_time", "inicio", "hora_inicio", "horario_inicio");
+    const endTime = pick(body, "end_time", "fim", "hora_fim", "horario_fim");
+    const description = pick(body, "description", "evento", "motivo", "motivo_agendamento");
 
     if (!envSearch || !date || !startTime) {
       return new Response(JSON.stringify({ error: "Dados insuficientes (ambiente, data e início são obrigatórios)" }), {
@@ -68,31 +68,33 @@ Deno.serve(async (req) => {
       });
     }
 
-    // 2. Formatar datas
-    // Tenta lidar com formatos dd/mm/yyyy ou yyyy-mm-dd
-    let formattedDate = date;
-    if (date.includes("/")) {
-      const [d, m, y] = date.split("/");
-      formattedDate = `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
-    }
-
-    const formatTime = (t: string) => {
-      let cleaned = t.toLowerCase().replace("h", ":");
-      if (!cleaned.includes(":")) cleaned += ":00";
-      const [h, m] = cleaned.split(":");
-      return `${h.padStart(2, '0')}:${(m || "00").padStart(2, '0')}`;
+    // 2. Formatar datas (Normalização robusta)
+    const normalizeDateTime = (dStr: string, tStr: string) => {
+      if (!dStr || !tStr) return null;
+      let datePart = String(dStr).trim().replace(/\//g, '-');
+      if (datePart.match(/^\d{1,2}-\d{1,2}$/)) {
+        datePart = `${new Date().getFullYear()}-${datePart.split('-')[1].padStart(2, '0')}-${datePart.split('-')[0].padStart(2, '0')}`;
+      } else if (datePart.match(/^\d{1,2}-\d{1,2}-\d{4}$/)) {
+        const [d, m, y] = datePart.split('-');
+        datePart = `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
+      }
+      let timePart = String(tStr).trim().toLowerCase().replace('h', ':').replace(' ', '');
+      if (!timePart.includes(':')) timePart += ':00';
+      const parts = timePart.split(':');
+      const h = parts[0].padStart(2, '0');
+      const m = (parts[1] || '00').padEnd(2, '0').substring(0, 2);
+      try {
+        const d = new Date(`${datePart}T${h}:${m}:00`);
+        return isNaN(d.getTime()) ? null : d;
+      } catch { return null; }
     };
 
-    const startStr = `${formattedDate}T${formatTime(startTime)}`;
-    const start = new Date(startStr);
-    
-    let end = endTime 
-      ? new Date(`${formattedDate}T${formatTime(endTime)}`) 
-      : new Date(start.getTime() + 60 * 60 * 1000);
+    const start = normalizeDateTime(date, startTime);
+    const end = normalizeDateTime(date, endTime) || (start ? new Date(start.getTime() + 60 * 60 * 1000) : null);
 
-    if (isNaN(start.getTime()) || isNaN(end.getTime())) {
-      console.error("Invalid Date/Time:", { date, startTime, endTime, startStr });
-      return new Response(JSON.stringify({ error: "Formato de data ou hora inválido. Use AAAA-MM-DD e HH:MM" }), {
+    if (!start || !end) {
+      console.error("Invalid Date/Time:", { date, startTime, endTime });
+      return new Response(JSON.stringify({ error: "Formato de data ou hora inválido." }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -123,7 +125,7 @@ Deno.serve(async (req) => {
       .from("bookings")
       .insert({
         environment_id: env.id,
-        requester_name: name || "Desconhecido",
+        requester_name: name || "WhatsApp User",
         requester_phone: phone,
         start_time: start.toISOString(),
         end_time: end.toISOString(),

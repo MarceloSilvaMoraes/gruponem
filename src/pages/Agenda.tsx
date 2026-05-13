@@ -104,53 +104,85 @@ export default function Agenda() {
 
         if (!tErr && tickets) {
           tickets.forEach((t: any) => {
-            // Evitar duplicados se o ID já existir (improvável entre tabelas diferentes mas bom prevenir)
+            // Evitar duplicados se o ID já existir
             if (results.some(r => r.id === t.id)) return;
 
             let displayDate = new Date(t.created_at);
             let displayTime = "Horário não inf.";
-            const dateMatch = t.subject.match(/(\d{1,2})\/(\d{1,2})/);
+            
+            // Tentar encontrar data no assunto ou descrição (dd/mm/aaaa ou dd/mm)
+            const dateMatch = (t.subject + " " + (t.description || "")).match(/(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?/);
             if (dateMatch) {
               try {
-                const currentYear = new Date().getFullYear();
-                displayDate = parse(`${dateMatch[1].padStart(2, '0')}/${dateMatch[2].padStart(2, '0')}/${currentYear}`, "dd/MM/yyyy", new Date());
+                const day = dateMatch[1].padStart(2, '0');
+                const month = dateMatch[2].padStart(2, '0');
+                const year = dateMatch[3] ? (dateMatch[3].length === 2 ? `20${dateMatch[3]}` : dateMatch[3]) : new Date().getFullYear();
+                displayDate = parse(`${day}/${month}/${year}`, "dd/MM/yyyy", new Date());
               } catch (e) {}
             }
 
-            const timeRangeMatch = t.subject.match(/(\d{1,2}[:h]\d{2}|\d{1,2}h)\s*(?:as|às|-|to)\s*(\d{1,2}[:h]\d{2}|\d{1,2}h)/i);
-            const singleTimeMatch = t.subject.match(/(\d{1,2}[:h]\d{2})|(\d{1,2}h)/i);
+            // Tentar encontrar horários (ex: 10:00, 10h, 10:00 as 11:00)
+            const fullText = (t.subject + " " + (t.description || "")).toLowerCase();
+            const timeRangeMatch = fullText.match(/(\d{1,2}[:h]\d{2}|\d{1,2}h)\s*(?:as|às|-|até|to)\s*(\d{1,2}[:h]\d{2}|\d{1,2}h)/i);
+            const singleTimeMatch = fullText.match(/(\d{1,2}[:h]\d{2})|(\d{1,2}h)/i);
+            
             let startTimeStr = "";
             let endTimeStr = "";
+            
             if (timeRangeMatch) {
-              startTimeStr = timeRangeMatch[1].toLowerCase().replace("h", ":00");
-              endTimeStr = timeRangeMatch[2].toLowerCase().replace("h", ":00");
+              startTimeStr = timeRangeMatch[1].replace("h", ":");
+              if (!startTimeStr.includes(":")) startTimeStr += ":00";
+              endTimeStr = timeRangeMatch[2].replace("h", ":");
+              if (!endTimeStr.includes(":")) endTimeStr += ":00";
               displayTime = `${timeRangeMatch[1]} às ${timeRangeMatch[2]}`;
             } else if (singleTimeMatch) {
-              startTimeStr = singleTimeMatch[0].toLowerCase().replace("h", ":00");
+              startTimeStr = singleTimeMatch[0].replace("h", ":");
+              if (!startTimeStr.includes(":")) startTimeStr += ":00";
               displayTime = singleTimeMatch[0];
             }
 
             let isPast = false;
             let isOngoing = false;
-            if (isToday(displayDate) && startTimeStr) {
-              const [sH, sM] = startTimeStr.split(":").map(Number);
-              const start = new Date(); start.setHours(sH, sM, 0, 0);
-              let end = new Date(start.getTime() + 60 * 60 * 1000);
-              if (endTimeStr) {
-                const [eH, eM] = endTimeStr.split(":").map(Number);
-                end = new Date(); end.setHours(eH, eM, 0, 0);
-              }
-              isOngoing = now >= start && now <= end;
-              isPast = now > end;
-            } else if (!isToday(displayDate) && now > displayDate) {
+            
+            // Calcular status baseado na data e hora extraídas
+            if (displayDate && startTimeStr) {
+              try {
+                const [sH, sM] = startTimeStr.split(":").map(Number);
+                const start = new Date(displayDate); 
+                start.setHours(sH, sM, 0, 0);
+                
+                let end = new Date(start.getTime() + 60 * 60 * 1000);
+                if (endTimeStr) {
+                  const [eH, eM] = endTimeStr.split(":").map(Number);
+                  end = new Date(displayDate);
+                  end.setHours(eH, eM, 0, 0);
+                }
+                
+                isOngoing = now >= start && now <= end;
+                isPast = now > end;
+                
+                // Se a data/hora for válida, atualizar start_time para ordenação
+                displayDate = start;
+              } catch (e) {}
+            } else if (isBefore(startOfDay(displayDate), startOfDay(now))) {
               isPast = true;
+            }
+
+            // Extrair nome do ambiente de forma mais inteligente
+            let envName = "Ambiente";
+            if (t.subject.includes("[AGENDA]")) {
+              envName = t.subject.replace("[AGENDA]", "").split("-")[0].trim();
+            } else if (t.subject.toLowerCase().includes("reserva de")) {
+              envName = t.subject.toLowerCase().replace("reserva de", "").split(".")[0].trim();
+            } else {
+              envName = t.subject.split("-")[0].trim();
             }
 
             results.push({
               id: t.id,
-              requester_name: t.contact?.name || "Desconhecido",
+              requester_name: t.contact?.name || "WhatsApp User",
               requester_phone: t.contact?.phone || "",
-              environment_name: t.subject.replace("[AGENDA]", "").split("-")[0].trim(),
+              environment_name: envName,
               start_time: displayDate.toISOString(),
               display_time: displayTime,
               description: t.description || t.subject,

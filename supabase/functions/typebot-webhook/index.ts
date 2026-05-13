@@ -21,23 +21,48 @@ serve(async (req) => {
     );
 
     const body = await req.json();
-    const { action, environment_name, date, start_time, end_time, category, name, phone, subject, description } = body;
+    console.log("Webhook Body:", body);
+
+    // Mapeamento flexível de campos do Typebot
+    const pick = (obj: any, ...keys: string[]) => {
+      for (const k of keys) {
+        if (obj[k] !== undefined && obj[k] !== null) return obj[k];
+        const found = Object.keys(obj).find(ok => ok.toLowerCase() === k.toLowerCase());
+        if (found) return obj[found];
+      }
+      return null;
+    };
+
+    const action = pick(body, "action", "event");
+    const envInput = pick(body, "environment_name", "sala", "ambiente", "local", "environment");
+    const dateInput = pick(body, "date", "data", "data_agendamento");
+    const startTimeInput = pick(body, "start_time", "inicio", "hora_inicio", "horario_inicio");
+    const endTimeInput = pick(body, "end_time", "fim", "hora_fim", "horario_fim");
+    const category = pick(body, "category", "categoria");
+    const name = pick(body, "name", "nome");
+    const phone = pick(body, "phone", "whatsapp", "remoteJid");
+    const subject = pick(body, "subject", "assunto");
+    const description = pick(body, "description", "descricao", "motivo", "motivo_agendamento", "evento");
 
     // Função Universal de Normalização de Data/Hora
     const normalizeDateTime = (dStr: string, tStr: string) => {
       if (!dStr || !tStr) return null;
-      let datePart = dStr.trim().replace(/\//g, '-');
+      let datePart = String(dStr).trim().replace(/\//g, '-');
+      
+      // Lidar com dd-mm-yyyy ou dd-mm
       if (datePart.match(/^\d{1,2}-\d{1,2}$/)) {
         datePart = `${new Date().getFullYear()}-${datePart.split('-')[1].padStart(2, '0')}-${datePart.split('-')[0].padStart(2, '0')}`;
       } else if (datePart.match(/^\d{1,2}-\d{1,2}-\d{4}$/)) {
         const [d, m, y] = datePart.split('-');
         datePart = `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
       }
-      let timePart = tStr.trim().toLowerCase().replace('h', ':').replace(' ', '');
+      
+      let timePart = String(tStr).trim().toLowerCase().replace('h', ':').replace(' ', '');
       if (!timePart.includes(':')) timePart += ':00';
       const parts = timePart.split(':');
       const h = parts[0].padStart(2, '0');
       const m = (parts[1] || '00').padEnd(2, '0').substring(0, 2);
+      
       try {
         const d = new Date(`${datePart}T${h}:${m}:00`);
         return isNaN(d.getTime()) ? null : d;
@@ -47,23 +72,23 @@ serve(async (req) => {
     // Função de Busca Flexível de Ambiente
     const findEnvironmentFlexibly = async (nameInput: string) => {
       if (!nameInput) return null;
-      const cleanInput = nameInput.toLowerCase().replace(/\s/g, '').replace(/0(?=\d)/g, '');
+      const cleanInput = String(nameInput).toLowerCase().replace(/\s/g, '').replace(/0(?=\d)/g, '');
       const { data: allEnvs } = await supabase.from('environments').select('id, name');
       return allEnvs?.find(e => {
         const dbClean = e.name.toLowerCase().replace(/\s/g, '').replace(/0(?=\d)/g, '');
-        return dbClean === cleanInput || e.name.toLowerCase().includes(nameInput.toLowerCase());
+        return dbClean === cleanInput || e.name.toLowerCase().includes(String(nameInput).toLowerCase());
       });
     };
 
     // ========= MODO: CHECK (Verificação de Disponibilidade) =========
-    if (action === "check" || body.event === "check_availability") {
-      const startReq = normalizeDateTime(date, start_time);
-      const endReq = normalizeDateTime(date, end_time || (start_time ? `${parseInt(start_time)+1}:00` : ""));
+    if (action === "check" || action === "check_availability") {
+      const startReq = normalizeDateTime(dateInput, startTimeInput);
+      const endReq = normalizeDateTime(dateInput, endTimeInput || (startTimeInput ? `${parseInt(startTimeInput)+1}:00` : ""));
 
-      if (!startReq) return json({ esta_disponivel: false, message: "Data inválida" });
+      if (!startReq) return json({ available: false, esta_disponivel: false, message: "Data ou hora inválida" });
 
-      const env = await findEnvironmentFlexibly(environment_name);
-      if (!env) return json({ esta_disponivel: true, message: "Sala nova" });
+      const env = await findEnvironmentFlexibly(envInput);
+      if (!env) return json({ available: true, esta_disponivel: true, message: "Sala nova ou não encontrada" });
 
       const { data: bookings } = await supabase
         .from('bookings')
@@ -90,34 +115,43 @@ serve(async (req) => {
     // ========= MODO: INSERT (Criação de Agendamento ou Ticket) =========
     const phoneRaw = String(phone || body.remoteJid || "").replace(/\D/g, "");
     
-    // Se for Agendamento (Category: booking)
-    if (category === "booking" || (subject && String(subject).includes("[AGENDA]"))) {
-      const envInput = environment_name || body.sala || (subject ? subject.split("-")[0].replace("[AGENDA]", "").trim() : "");
-      let env = await findEnvironmentFlexibly(envInput);
+    // Se for Agendamento (Category: booking ou se tiver dados de ambiente e data)
+    const isBooking = category === "booking" || 
+                     (subject && String(subject).includes("[AGENDA]")) || 
+                     (envInput && dateInput && startTimeInput);
+
+    if (isBooking) {
+      let env = await findEnvironmentFlexibly(envInput || (subject ? subject.split("-")[0].replace("[AGENDA]", "").trim() : ""));
 
       if (!env && envInput) {
+        // Criar ambiente se não existir
         const { data: newEnv } = await supabase
           .from('environments')
-          .insert({ name: envInput.charAt(0).toUpperCase() + envInput.slice(1) })
+          .insert({ name: String(envInput).charAt(0).toUpperCase() + String(envInput).slice(1) })
           .select().single();
         env = newEnv;
       }
 
       if (env) {
-        const startISO = normalizeDateTime(date, start_time);
+        const startISO = normalizeDateTime(dateInput, startTimeInput);
         if (startISO) {
-          const endISO = normalizeDateTime(date, end_time) || new Date(startISO.getTime() + 3600000);
+          const endISO = normalizeDateTime(dateInput, endTimeInput) || new Date(startISO.getTime() + 3600000);
           
-          await supabase.from("bookings").insert({
+          const { data: booking, error: bErr } = await supabase.from("bookings").insert({
             environment_id: env.id,
             requester_name: name || "WhatsApp User",
             requester_phone: phoneRaw,
             start_time: startISO.toISOString(),
             end_time: endISO.toISOString(),
-            description: description || body.message || subject,
+            description: description || subject || `Reserva de ${env.name}`,
             status: "confirmed"
-          });
-          return json({ ok: true, message: "Reserva confirmada" });
+          }).select().single();
+
+          if (!bErr) {
+            return json({ ok: true, message: "Reserva confirmada", booking_id: booking.id });
+          } else {
+            console.error("Error creating booking:", bErr);
+          }
         }
       }
     }
@@ -130,17 +164,23 @@ serve(async (req) => {
     if (contact) {
       const { data: ticket } = await supabase.from("tickets").insert({
         contact_id: contact.id,
-        subject: subject || "Novo Chamado via WhatsApp",
-        description: description || body.message || "Sem descrição",
+        subject: subject || (envInput ? `[AGENDA] ${envInput} - ${description || "Reserva"}` : "Novo Chamado via WhatsApp"),
+        description: description || body.message || subject || "Sem descrição",
         status: "open",
-        category: category || "general",
+        category: category || (isBooking ? "booking" : "general"),
         priority: "medium"
       }).select().single();
 
-      return json({ ok: true, ticket_id: ticket?.id });
+      return json({ ok: true, ticket_id: ticket?.id, message: "Ticket criado" });
     }
 
-    return json({ error: "Não foi possível processar" }, 400);
+    return json({ error: "Não foi possível processar a solicitação" }, 400);
+
+  } catch (e: any) {
+    console.error("Webhook Error:", e);
+    return json({ error: e.message }, 500);
+  }
+});
 
   } catch (e: any) {
     return json({ error: e.message }, 500);
