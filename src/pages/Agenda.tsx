@@ -3,7 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Calendar as CalendarIcon, Clock, User, MapPin, Search, Monitor, ArrowLeft, Plus, MessageSquare, Pencil } from "lucide-react";
+import { Calendar as CalendarIcon, Clock, User, MapPin, Search, Monitor, ArrowLeft, Plus, MessageSquare, Pencil, Volume2, VolumeX, Radio } from "lucide-react";
 import { format, parse, isToday, isBefore, startOfDay } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { Input } from "@/components/ui/input";
@@ -14,6 +14,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useAuth } from "@/hooks/useAuth";
+import { useBookingAlerts } from "@/hooks/useBookingAlerts";
 
 export default function Agenda() {
   const { role } = useAuth();
@@ -24,6 +25,7 @@ export default function Agenda() {
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [editingBooking, setEditingBooking] = useState<any>(null);
+  const [audioAlertsEnabled, setAudioAlertsEnabled] = useState(false);
   const queryClient = useQueryClient();
 
   // Estados para o novo agendamento
@@ -201,6 +203,9 @@ export default function Agenda() {
       }
     },
   });
+
+  // Sistema de alertas por áudio - monitora reservas e anuncia quando o horário chega
+  const { lastAnnounced, testAudio } = useBookingAlerts(bookings as any, audioAlertsEnabled);
 
   const handleCreateBooking = async () => {
     if (!newBooking.environment_name || !newBooking.requester_name) {
@@ -518,6 +523,37 @@ export default function Agenda() {
             <Monitor className="h-4 w-4" /> Modo TV
           </Button>
 
+          {/* Botão de Alertas por Áudio */}
+          <div className="flex items-center gap-1">
+            <Button
+              variant={audioAlertsEnabled ? "default" : "outline"}
+              onClick={() => {
+                const newState = !audioAlertsEnabled;
+                setAudioAlertsEnabled(newState);
+                if (newState) {
+                  // Ativar contexto de áudio com interação do usuário
+                  testAudio();
+                } else {
+                  window.speechSynthesis?.cancel();
+                }
+              }}
+              className={`gap-2 ${audioAlertsEnabled ? 'bg-green-600 hover:bg-green-700 text-white shadow-lg shadow-green-600/30' : ''}`}
+            >
+              {audioAlertsEnabled ? (
+                <>
+                  <Volume2 className="h-4 w-4 animate-pulse" />
+                  <span className="hidden sm:inline">Áudio Ativo</span>
+                  <Radio className="h-3 w-3 animate-ping" />
+                </>
+              ) : (
+                <>
+                  <VolumeX className="h-4 w-4" />
+                  <span className="hidden sm:inline">Ativar Áudio</span>
+                </>
+              )}
+            </Button>
+          </div>
+
           {/* Modal de Edição */}
           <Dialog open={isEditModalOpen} onOpenChange={setIsEditModalOpen}>
             <DialogContent className="sm:max-w-[500px]">
@@ -587,6 +623,24 @@ export default function Agenda() {
           </div>
         </div>
       </div>
+
+      {/* Indicador de alertas por áudio */}
+      {audioAlertsEnabled && (
+        <div className="flex items-center gap-3 p-3 rounded-xl border border-green-200 bg-green-50 dark:bg-green-950/30 dark:border-green-800">
+          <div className="relative flex h-3 w-3">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
+            <span className="relative inline-flex rounded-full h-3 w-3 bg-green-500" />
+          </div>
+          <p className="text-sm text-green-700 dark:text-green-300 font-medium">
+            🔊 Sistema de áudio ativo — Reservas serão anunciadas automaticamente no horário agendado
+          </p>
+          {lastAnnounced && (
+            <span className="ml-auto text-xs text-green-600 dark:text-green-400">
+              Último: {lastAnnounced}
+            </span>
+          )}
+        </div>
+      )}
 
       <div className="grid gap-4">
         {queryError ? (
